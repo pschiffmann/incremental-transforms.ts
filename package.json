@@ -1,0 +1,20 @@
+{
+  "name": "incremental-transforms",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "test": "jest"
+  },
+  "dependencies": {
+    "flatqueue": "^1.2.1",
+    "typescript": "^4.0.2"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.11.6",
+    "@babel/preset-env": "^7.11.5",
+    "@babel/preset-typescript": "^7.10.4",
+    "@types/jest": "^26.0.13",
+    "babel-jest": "^26.3.0",
+    "jest": "^26.4.2"
+  }
+}

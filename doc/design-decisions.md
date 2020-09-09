@@ -1,0 +1,3 @@
+- Observers can't use hooks because they run in/after the "effect" phase; that's too late to schedule more effets.
+- Nodes become unusable after they disconnect, because otherwise it would not be clear when the final useEffect cleanup functions should run: when the node disconnects, or never.
+- The `useContext` hook from react doesn't work for this package because a node has more than one parent, so there could be multiple providers for the same context.
