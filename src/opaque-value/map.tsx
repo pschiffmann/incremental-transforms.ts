@@ -1,7 +1,6 @@
-import { OpaqueValue, OpaqueValueTransformBase } from "./base";
-import type { OpaqueValuePatch } from "./base";
 import { ExtractContextValues, PatchObject } from "../utility-types";
-import { _addNode } from "../nodes";
+import type { OpaqueValuePatch } from "./base";
+import { OpaqueValue, OpaqueValueTransformBase } from "./base";
 
 export type MappedOpaqueValueCallback<I, O, C extends {}> = (
   self: I,
@@ -18,7 +17,9 @@ export function map<I, O, C extends {}>(
   context?: C
 ): OpaqueValue<O> {
   const node = new MappedOpaqueValue(self, callback, context ?? ({} as C));
-  _addNode(node);
+  try {
+    node.resume();
+  } catch (e) {}
   return node;
 }
 
@@ -48,13 +49,13 @@ export class MappedOpaqueValue<
     patch: PatchObject<MappedOpaqueValueDependencies<I, C>>
   ): OpaqueValuePatch<O> {
     const context: any = {};
-    for (const [key, node] of Object.entries(this._dependencies)) {
+    for (const [key, node] of Object.entries(this.dependencies)) {
       if (key === "self") continue;
       context[key] =
         ((patch as any)[key] as OpaqueValuePatch<any>).value ?? node.get();
     }
     const result = this.#callback(
-      patch.self.value ?? this._dependencies.self.get(),
+      patch.self.value ?? this.dependencies.self.get(),
       context
     );
     return { value: result };

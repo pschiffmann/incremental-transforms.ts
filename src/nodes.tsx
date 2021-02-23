@@ -1,45 +1,68 @@
-import * as $Set from "./util/set";
-import * as $Map from "./util/map";
+import { HookPropsMap, HookStateMap } from "./hooks/context";
+import { mutateSourceNode } from "./process";
 import type { PatchObject } from "./utility-types";
-import { process, nodes } from "./globals";
-import { ObserverDefinition } from "./observers";
-import { Process } from "./process";
-import type { HookContext } from "./hooks";
 
-export interface NodeExpando {
-  /**
-   *
-   */
-  readonly id: number;
+/**
+ *
+ */
+export const nodeIds = new WeakMap<Node, number>();
+let nextNodeId = 0;
 
-  /**
-   *
-   */
-  hookContext: HookContext<any>;
+/**
+ *
+ */
+export const consumers = new WeakMap<Node, Set<TransformNode>>();
 
-  /**
-   * All connected nodes that have this node in their dependencies.
-   */
-  readonly consumedBy: Set<TransformNode>;
+export const hookProps = new WeakMap<TransformNode, HookPropsMap>();
+export const hookState = new WeakMap<TransformNode, HookStateMap>();
 
-  /**
-   * All observers that have this node in their dependencies.
-   */
-  readonly observedBy: Set<ObserverDefinition>;
-}
-
+/**
+ *
+ */
 export abstract class Node<P = unknown> {
-  get connected(): boolean {
-    return isConnected(this);
+  constructor() {
+    nodeIds.set(this, nextNodeId++);
+    consumers.set(this, new Set());
+  }
+
+  #suspended = true;
+
+  get suspended(): boolean {
+    return this.#suspended;
   }
 
   /**
-   * Disconnects this node and all nodes that depend on this from the graph,
-   * and terminates all observers on these nodes. If this node is already
-   * disconnected, throws an error.
+   * Suspends this node and all transitive `consumers`.
    */
-  disconnect() {
-    removeNode(this);
+  suspend(): void {
+    this.#suspended = true;
+    for (const consumer of consumers.get(this)!) {
+      consumer.suspend();
+    }
+  }
+
+  /**
+   * Resumes this node, but doesn't resume any of its `consumers`.
+   */
+  resume(): void {
+    this.#suspended = false;
+  }
+
+  /**
+   * Returns all nodes that have this node as an input and are not suspended.
+   */
+  get consumers(): TransformNode[] {
+    return [...consumers.get(this)!];
+  }
+
+  /**
+   * Throws an error if this node has not been initialized, or has been
+   * disconnected. Should be called by subclasses in any data accessor method.
+   */
+  protected _assertNotSuspended(): void {
+    if (this.#suspended) {
+      throw new Error("Can't read from suspended nodes.");
+    }
   }
 
   /**
@@ -47,74 +70,86 @@ export abstract class Node<P = unknown> {
    * apply `patch` to it.
    */
   abstract _commit(patch: P): void;
-
-  /**
-   * Throws an error if this node has not been initialized, or has been
-   * disconnected. Should be called by subclasses in any data accessor method.
-   */
-  protected _assertConnected(): void {
-    const expando = nodes.get(this);
-    if (!expando) {
-      throw new Error("Node is disconnected.");
-    } else if (!expando.initialized) {
-      throw new Error("Node is not initialized.");
-    }
-  }
 }
 
 /**
- * A source node has no dependencies
+ * A source node has setter methods that can be used to mutate the object
+ * directly. It has no dependencies.
  */
 export abstract class SourceNode<P = unknown> extends Node<P> {
-  protected abstract _createPatch(): P;
+  /**
+   * Returns an empty patch object that is then modified by `_setState()`
+   * callbacks.
+   */
+  abstract _createPatch(): P;
 
   /**
    * Inspired by: https://api.flutter.dev/flutter/widgets/State/setState.html
+   *
+   * `callback` may modify the passed-in patch object in place, or return a new
+   * value. Returning `null` indicates that `callback` made no changes to this
+   * node, or that all previous changes in `patch` have been reverted and
+   * consumers no longer need to be re-rendered.
    */
-  protected _setState(callback: (patch: P) => void): void {
-    this._assertConnected();
-    if (!process.current) {
-      const patch = this._createPatch();
-      callback(patch);
-      process.current = new Process("render");
-      process.current.scheduled.set(this, patch);
-      process.current.run();
-      process.current = null;
-    } else {
-      switch (process.current.phase) {
-        case "transaction":
-        case "effect":
-        case "observer":
-          const patch = $Map.putIfAbsent(process.current.scheduled, this, () =>
-            this._createPatch()
-          );
-          callback(patch);
-          break;
-        case "render":
-          throw new Error("Can't mutate a node from inside a render function.");
-        default:
-          throw new Error("Unimplemented");
-      }
-    }
+  protected _setState(callback: (patch: P) => P | null): void {
+    this._assertNotSuspended();
+    mutateSourceNode(this, callback);
   }
 }
 
 /**
- * `D` is the type of `_dependencies`, `P`  is the patch object type.
+ * `D` is the type of `dependencies`, `P`  is the patch object type, `K` is the
+ * hook context key type.
  */
 export abstract class TransformNode<
   D extends {} = {},
   P = unknown,
   K = unknown
 > extends Node<P> {
-  constructor(readonly _dependencies: D) {
+  constructor(dependencies: D) {
     super();
-    // Object.defineProperty(this, "_dependencies", {
-    //   value: Object.freeze(dependencies),
-    //   configurable: false,
-    //   enumerable: false,
-    //   writable: false
-    // });
+    hookProps.set(this, new Map());
+    hookState.set(this, new Map());
+    this.#dependencies = Object.freeze(dependencies);
+  }
+
+  #dependencies: D;
+
+  get dependencies() {
+    return this.#dependencies;
+  }
+
+  suspend() {
+    if (this.suspended) return;
+    for (const dependency of Object.values(this.#dependencies) as Node[]) {
+      consumers.get(dependency)!.delete(this);
+    }
+    super.suspend();
+  }
+
+  resume() {
+    if (!this.suspended) return;
+    if (process !== null) {
+      throw new Error("Can't resume inside a transaction.");
+    }
+    const dependencies: Node[] = Object.values(this.#dependencies);
+    for (const dependency of dependencies) {
+      if (dependency.suspended) {
+        throw new Error(
+          "Can't resume this node because one of its dependencies is "
+        );
+      }
+    }
+    for (const dependency of dependencies) {
+      consumers.get(dependency)!.add(this);
+    }
+    super.resume();
+    try {
+      // TODO: process.run()
+    } catch (e) {
+      this.suspend();
+      throw e;
+    }
   }
 
   /**
@@ -122,75 +157,7 @@ export abstract class TransformNode<
    */
   abstract _render(
     dependencies: PatchObject<D>,
-    hookRenderer: HookContext<K>
+    dirtyKeys: Set<K>,
+    hookRenderer: <R>(key: K, callback: () => R) => R
   ): P;
-}
-
-export function isConnected(node: Node): boolean {
-  return nodes.has(node);
-}
-
-let nextNodeId = 1;
-
-/**
- *
- */
-export function _addNode(node: Node, isDirty: boolean = true): void {
-  if (node instanceof TransformNode) {
-    const duplicates = new Map<Node, string>();
-    for (const [name, dependency] of Object.entries<Node>(node._dependencies)) {
-      if (!(dependency instanceof Node)) {
-        throw new Error(
-          `Dependencies must be instances of class Node, but ${name} is a ` +
-            `${typeof dependency}.`
-        );
-      }
-      if (!isConnected(dependency)) {
-        throw new Error(`Dependency ${name} is not connected.`);
-      }
-      if (duplicates.has(dependency)) {
-        throw new Error(
-          `Dependencies ${duplicates.get(dependency)} and ${name} reference ` +
-            "the same node."
-        );
-      }
-    }
-  }
-
-  // TODO: If `dependencies` is not empty, schedule a render.
-  const needsInitialization = Object.keys(node).length !== 0;
-  nodes.set(node, {
-    id: nextNodeId++,
-    initialized: !needsInitialization,
-    consumedBy: new Set(),
-    observedBy: new Set()
-  });
-  for (const dependency of Object.values<Node>(node._dependencies)) {
-    nodes.get(dependency)!.consumedBy.add(node);
-  }
-}
-
-/**
- *
- */
-export function removeNode(node: Node): void {
-  if (!isConnected(node)) throw new Error(`Node is already disconnected.`);
-
-  const disconnectedNodes = new Set([node]);
-  const disconnectedObservers = new Set<ObserverDefinition>();
-  for (const current of disconnectedNodes) {
-    const expando = nodes.get(current)!;
-    nodes.delete(current);
-    for (const dependency of Object.values<Node>(node._dependencies)) {
-      nodes.get(dependency)!.consumedBy.delete(current);
-    }
-    $Set.addAll(disconnectedNodes, expando.consumedBy);
-    $Set.addAll(disconnectedObservers, expando.observedBy);
-  }
-  for (const observer of disconnectedObservers) {
-    for (const dependency of observer.dependencies!) {
-      nodes.get(dependency)?.observedBy.delete(observer);
-    }
-    observer.dependencies = null;
-  }
 }

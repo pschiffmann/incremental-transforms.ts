@@ -1,7 +1,5 @@
 {
-  "include": [
-    "src/**/*"
-  ],
+  "include": ["src/**/*"],
   "compilerOptions": {
     "strict": true,
     "module": "commonjs",
@@ -9,9 +7,7 @@
     "esModuleInterop": true,
     "sourceMap": true,
     "allowJs": true,
-    "lib": [
-      "esnext"
-    ],
+    "lib": ["esnext"],
     "downlevelIteration": true,
     "target": "ES2018",
     "rootDir": "src",
