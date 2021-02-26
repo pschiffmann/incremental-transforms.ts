@@ -1,17 +1,42 @@
 import FlatQueue from "flatqueue";
-import { HookStateMap } from "./hooks/context";
-import { SetStateCallback } from "./hooks/use-state";
-import { Node, nodeIds, SourceNode, TransformNode } from "./nodes";
+import { executeWithHooks, HookPropsMap } from "./hooks/context";
+import { getNodeExpando, Node, SourceNode, TransformNode } from "./nodes";
 import * as $Map from "./util/map";
 
 export type ProcessPhase = "mutate" | "render" | "commit" | "effect";
 
 interface Process {
   phase: ProcessPhase;
+
+  /**
+   * Nodes that have been connected and must now be initialized.
+   */
+  uninitialized: Set<TransformNode>;
+
   patches: Map<Node, any>;
-  hookStates: Map<TransformNode, HookStateMap>;
+
+  /**
+   * This map is filled by `executeWithHooks`.
+   */
+  hookProps: Map<TransformNode, HookPropsMap | null>;
+  hookState: Map<TransformNode, Map<number, any>>;
   scheduledEffectCleanups: (() => void)[];
   scheduledEffects: (() => void)[];
+
+  handleError?(error: any): void;
+}
+
+function createProcess(handleError?: Process["handleError"]): Process {
+  return {
+    phase: "mutate",
+    uninitialized: new Set(),
+    patches: new Map(),
+    hookProps: new Map(),
+    hookState: new Map(),
+    scheduledEffectCleanups: [],
+    scheduledEffects: [],
+    handleError,
+  };
 }
 
 let process: Process | null = null;
@@ -19,73 +44,90 @@ let process: Process | null = null;
 /**
  *
  */
-export function transaction<R>(callback: () => R): R {
-  beforeMutate();
-  try {
-    const result = callback();
-    run();
-    return result;
-  } finally {
-    process = null;
+export function transaction<R>(
+  callback: () => R,
+  handleError?: (error: any) => void
+): R {
+  if (process) {
+    throw new Error();
   }
+  process = createProcess(handleError);
+  let result: R;
+  mutateNode(() => {
+    result = callback();
+  });
+  return result!;
 }
 
-export function mutateSourceNode<T extends SourceNode<any>>(
+export function mutateSourceNode<P, T extends SourceNode<P>>(
   node: T,
-  setStateCallback: (patch: T extends SourceNode<infer P> ? P : never) => void
+  setStateCallback: (patch: P) => P | null
 ): void {
-  const runImmediately = beforeMutate();
-  const patch = $Map.putIfAbsent(process!.patches, node, () =>
-    node._createPatch()
-  );
-  setStateCallback(patch);
-  if (runImmediately) run();
-}
-
-export function mutateTransformNode(
-  node: Node,
-  key: any,
-  stateIndex: number,
-  newValue: SetStateCallback<any>
-) {
-  const runImmediately = beforeMutate();
-  const hookStatesForNode = $Map.putIfAbsent(
-    process!.hookStates,
-    node,
-    () => new Map()
-  );
-  const hookStateForKey = $Map.putIfAbsent(hookStatesForNode, key, () => []);
-  const context = $Map.putIfAbsent(process!.hookContexts, node, () => ({
-    changed: [],
-  }));
-  context.changed.push(key);
-  if (runImmediately) run();
+  mutateNode(() => {
+    const patch = setStateCallback(
+      process!.patches.get(node) ?? node._createPatch()
+    );
+    if (patch) {
+      process!.patches.set(node, patch);
+    } else {
+      process!.patches.delete(node);
+    }
+  });
 }
 
 /**
- * Checks that a mutation is currently allowed (no process is currently running,
- * or still in "mutate" phase"). Creates a new process if necessary. Returns
- * `true` if a new process was created and should `run()` directly after the
- * mutation.
+ * `setStateCallback` is only used to verify that the call has not been made
+ * through a stale reference.
  */
-function beforeMutate(): boolean {
-  if (process) {
-    switch (process.phase) {
-      case "mutate":
-        return false;
-      case "render":
-      case "commit":
-      case "effect":
-        throw new Error("Can't call setState() during render or effect phase.");
-    }
-  } else {
-    process = {
-      phase: "mutate",
-      patches: new Map(),
-      hookContexts: new Map(),
-    };
-    return true;
+export function mutateTransformNode<T>(
+  node: TransformNode,
+  key: any,
+  hookIndex: number,
+  setStateCallback: any,
+  stateIndex: number,
+  value: T | ((previous: T) => T)
+) {
+  if (node.suspended) {
+    throw new Error("Can't modify a suspended node.");
   }
+  const expando = getNodeExpando(node)!;
+  const hookProps = expando.hookProps.get(key)?.[hookIndex];
+  if (
+    !hookProps ||
+    hookProps.type !== "state" ||
+    hookProps.setState !== setStateCallback
+  ) {
+    throw new Error("You used a stale `setState()` callback.");
+  }
+
+  mutateNode(() => {
+    const lastHookState = expando.hookState.get(key)!;
+    let nextHookState = process!.hookState.get(node);
+
+    let nextValue: T;
+    if (value instanceof Function) {
+      const lastValue =
+        nextHookState && nextHookState.has(stateIndex)
+          ? nextHookState.get(stateIndex)
+          : lastHookState[stateIndex];
+      nextValue = value(lastValue);
+    } else {
+      nextValue = value;
+    }
+
+    if (Object.is(nextValue, lastHookState[stateIndex])) {
+      if (nextHookState) {
+        nextHookState.delete(stateIndex);
+        if (nextHookState.size === 0) process!.hookState.delete(node);
+      }
+    } else {
+      if (!nextHookState) {
+        nextHookState = new Map();
+        process!.hookState.set(node, nextHookState);
+      }
+      nextHookState.set(stateIndex, nextValue);
+    }
+  });
 }
 
 /**
@@ -93,9 +135,22 @@ function beforeMutate(): boolean {
  * rendering, commits the changes to the nodes and executes effects. `process`
  * must not be `null` when this method is called.
  */
-function run() {
+function mutateNode(callback: () => void): void {
+  if (process) {
+    switch (process.phase) {
+      case "mutate":
+        callback();
+        return;
+      case "render":
+      case "commit":
+      case "effect":
+        throw new Error("Can't call setState() during render or effect phase.");
+    }
+  }
+
+  process = createProcess();
   try {
-    if (process!.patches.size === 0 && process!.hookContexts.size === 0) return;
+    if (process!.patches.size === 0 && process!.hookProps.size === 0) return;
     process!.phase = "render";
     render();
     process!.phase = "commit";
@@ -112,10 +167,10 @@ function render() {
   const discovered = new Set<TransformNode>();
   for (const sourceNode of process!.patches.keys()) {
     for (const consumer of sourceNode.consumers) {
-      dirty.push(nodeIds.get(consumer)!, consumer);
+      dirty.push(getNodeExpando(consumer).id, consumer);
     }
   }
-  for (const node of process!.hookContexts.keys()) {
+  for (const node of process!.hookProps.keys()) {
     dirty.push(nodeIds.get(node)!, node);
   }
   for (;;) {
@@ -129,7 +184,23 @@ function render() {
         deps[name] = process!.patches.get(dep);
       }
     }
-    const patch = node._render(deps, null);
+    const nextHookProps = $Map.putIfAbsent(
+      process!.hookProps,
+      node,
+      () => new Map()
+    );
+    const patch = node._render(
+      deps,
+      new Set(nextHookProps.keys()),
+      executeWithHooks.bind(
+        null,
+        node,
+        hookProps.get(node)!,
+        nextHookProps,
+        process!.scheduledEffectCleanups,
+        process!.scheduledEffects
+      ) as any
+    );
     if (patch !== null) {
       process!.patches.set(node, patch);
       for (const consumer of node.consumers) {
@@ -146,8 +217,25 @@ function commit() {
   for (const [node, patch] of process!.patches) {
     node._commit(patch);
   }
-  for (const [node, hookContext] of process!.hookContexts) {
+  for (const [node, props] of process!.hookProps) {
+    nodeExpandos.get(node)!.hookProps;
   }
 }
 
-function effect() {}
+function effect() {
+  const handleError = process!.handleError ?? console.error;
+  for (const callback of process!.scheduledEffectCleanups) {
+    try {
+      callback();
+    } catch (e) {
+      handleError(e);
+    }
+  }
+  for (const callback of process!.scheduledEffects) {
+    try {
+      callback();
+    } catch (e) {
+      handleError(e);
+    }
+  }
+}

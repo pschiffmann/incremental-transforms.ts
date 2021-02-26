@@ -2,27 +2,43 @@ import { HookPropsMap, HookStateMap } from "./hooks/context";
 import { mutateSourceNode } from "./process";
 import type { PatchObject } from "./utility-types";
 
-/**
- *
- */
-export const nodeIds = new WeakMap<Node, number>();
+const nodeExpandos = new WeakMap<Node, NodeExpando | TransformNodeExpando>();
+
+export function getNodeExpando(node: SourceNode): NodeExpando;
+export function getNodeExpando(node: TransformNode): TransformNodeExpando;
+export function getNodeExpando(node: Node) {
+  return nodeExpandos.get(node);
+}
+
+export interface NodeExpando {
+  readonly id: number;
+  readonly consumers: Set<TransformNode>;
+}
+
+export interface TransformNodeExpando extends NodeExpando {
+  readonly hookProps: HookPropsMap;
+  readonly hookState: HookStateMap;
+}
+
 let nextNodeId = 0;
-
-/**
- *
- */
-export const consumers = new WeakMap<Node, Set<TransformNode>>();
-
-export const hookProps = new WeakMap<TransformNode, HookPropsMap>();
-export const hookState = new WeakMap<TransformNode, HookStateMap>();
 
 /**
  *
  */
 export abstract class Node<P = unknown> {
   constructor() {
-    nodeIds.set(this, nextNodeId++);
-    consumers.set(this, new Set());
+    const id = nextNodeId++;
+    const consumers = new Set<TransformNode>();
+    if (this instanceof TransformNode) {
+      nodeExpandos.set(this, {
+        id,
+        consumers,
+        hookProps: new Map(),
+        hookState: new Map(),
+      });
+    } else {
+      nodeExpandos.set(this, { id, consumers });
+    }
   }
 
   #suspended = true;
@@ -36,7 +52,7 @@ export abstract class Node<P = unknown> {
    */
   suspend(): void {
     this.#suspended = true;
-    for (const consumer of consumers.get(this)!) {
+    for (const consumer of nodeExpandos.get(this)!.consumers) {
       consumer.suspend();
     }
   }
@@ -52,7 +68,7 @@ export abstract class Node<P = unknown> {
    * Returns all nodes that have this node as an input and are not suspended.
    */
   get consumers(): TransformNode[] {
-    return [...consumers.get(this)!];
+    return [...nodeExpandos.get(this)!.consumers];
   }
 
   /**
@@ -108,8 +124,6 @@ export abstract class TransformNode<
 > extends Node<P> {
   constructor(dependencies: D) {
     super();
-    hookProps.set(this, new Map());
-    hookState.set(this, new Map());
     this.#dependencies = Object.freeze(dependencies);
   }
 
@@ -119,10 +133,11 @@ export abstract class TransformNode<
     return this.#dependencies;
   }
 
+  // TODO: Rename to "disconnect", run all effect cleanups
   suspend() {
     if (this.suspended) return;
     for (const dependency of Object.values(this.#dependencies) as Node[]) {
-      consumers.get(dependency)!.delete(this);
+      nodeExpandos.get(dependency)!.consumers.delete(this);
     }
     super.suspend();
   }
@@ -141,7 +156,7 @@ export abstract class TransformNode<
       }
     }
     for (const dependency of dependencies) {
-      consumers.get(dependency)!.add(this);
+      nodeExpandos.get(dependency)!.consumers.add(this);
     }
     super.resume();
     try {
@@ -152,12 +167,17 @@ export abstract class TransformNode<
     }
   }
 
+  abstract _initialize(
+    hookRenderer: <R>(key: K, callback?: () => R) => R
+  ): void;
+
   /**
-   *
+   * Calling `hookRenderer` without a callback marks the key as removed and runs
+   * all cleanup effects.
    */
   abstract _render(
     dependencies: PatchObject<D>,
     dirtyKeys: Set<K>,
-    hookRenderer: <R>(key: K, callback: () => R) => R
+    hookRenderer: <R>(key: K, callback?: () => R) => R
   ): P;
 }

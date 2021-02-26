@@ -2,9 +2,9 @@ import { mutateTransformNode } from "../process";
 import { HookContext } from "./context";
 
 export interface StateHookProps {
-  type: "state";
-  stateIndex: number;
-  setState: SetStateCallback<any>;
+  readonly type: "state";
+  readonly stateIndex: number;
+  readonly setState: SetStateCallback<any>;
 }
 
 export type SetStateCallback<T> =
@@ -27,9 +27,11 @@ export function useState<T>(
       : initializer;
   const stateIndex = context.pushState(value);
   const { node, key } = context;
-  function setState(x: any | ((current: any) => any)) {
-    mutateTransformNode(node, key, stateIndex, x);
+
+  let hookIndex: number;
+  function setState(value: any | ((current: any) => any)) {
+    mutateTransformNode(node, key, hookIndex, setState, stateIndex, value);
   }
-  context.pushHookProps({ type: "state", stateIndex, setState });
+  hookIndex = context.pushHookProps({ type: "state", stateIndex, setState });
   return [value, setState];
 }

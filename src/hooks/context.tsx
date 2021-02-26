@@ -1,9 +1,15 @@
 import { TransformNode } from "../nodes";
 import type { EffectHookProps } from "./use-effect";
 import type { MemoHookProps } from "./use-memo";
+import type { RefHookProps } from "./use-ref";
 import type { StateHookProps } from "./use-state";
 
-export type HookProps = EffectHookProps | MemoHookProps | StateHookProps;
+export type HookProps =
+  | EffectHookProps
+  | MemoHookProps
+  | RefHookProps
+  | StateHookProps;
+
 export type HookType = HookProps["type"];
 
 export class HookContext {
@@ -11,14 +17,17 @@ export class HookContext {
     node: TransformNode,
     lastHookProps: HookProps[] | null,
     nextHookProps: HookProps[],
-    hookState: any[],
+    lastHookState: any[],
+    nextHookState: Map<number, any>,
     effectCleanups: (() => void)[],
     effects: (() => void)[]
   ) {
     this.node = node;
     this.#lastHookProps = lastHookProps;
     this.#nextHookProps = nextHookProps;
-    (this.#stateValues = hookState), (this.#effectCleanups = effectCleanups);
+    this.#lastHookState = lastHookState;
+    this.#nextHookState = nextHookState;
+    this.#effectCleanups = effectCleanups;
     this.#effects = effects;
   }
 
@@ -30,6 +39,7 @@ export class HookContext {
 
   getLastHookProps(type: "memo"): MemoHookProps | null;
   getLastHookProps(type: "effect"): EffectHookProps | null;
+  getLastHookProps(type: "ref"): RefHookProps | null;
   getLastHookProps(type: "state"): StateHookProps | null;
   getLastHookProps(type: HookType): HookProps | null {
     if (!this.#lastHookProps) return null;
@@ -40,8 +50,9 @@ export class HookContext {
     return result;
   }
 
-  pushHookProps(state: HookProps): void {
+  pushHookProps(state: HookProps): number {
     this.#nextHookProps.push(state);
+    return this.#nextHookProps.length - 1;
   }
 
   #effectCleanups: (() => void)[];
@@ -66,15 +77,22 @@ export class HookContext {
     return result;
   }
 
-  #stateValues: any[];
+  #lastHookState: any[];
+  #nextHookState: Map<number, any>;
 
-  getState(index: number): any {
-    return this.#stateValues[index];
+  getState(stateIndex: number): any {
+    return this.#nextHookState.has(stateIndex)
+      ? this.#nextHookState.get(stateIndex)
+      : this.#lastHookState[stateIndex];
   }
 
+  /**
+   *
+   */
   pushState(value: any): number {
-    this.#stateValues.push(value);
-    return this.#stateValues.length - 1;
+    const stateIndex = this.#nextHookState.size;
+    this.#nextHookState.set(stateIndex, value);
+    return stateIndex;
   }
 
   static get current(): HookContext {
@@ -100,17 +118,22 @@ let hookContext: HookContext | null = null;
 export function executeWithHooks<K, R>(
   node: TransformNode,
   lastHookProps: HookPropsMap,
-  nextHookProps: HookPropsMap,
-  nextHookState: HookStateMap,
+  nextHookProps: Map<TransformNode, any[] | null>,
   effectCleanups: (() => void)[],
   effects: (() => void)[],
   key: K,
-  callback: () => R
+  callback?: () => R
 ): R {
+  if (nextHookProps.has(key)) {
+    throw new Error("This key has already been rendered.");
+  }
+  if (!callback) {
+    nextHookProps.set(key, null);
+    return;
+  }
+
   const nextProps: HookProps[] = [];
   nextHookProps.set(key, nextProps);
-  const nextState: any[] = [];
-  nextHookState.set(key, nextState);
   hookContext = new HookContext(
     node,
     lastHookProps.get(key) ?? null,
