@@ -1,23 +1,30 @@
 import { HookPropsMap, HookStateMap } from "./hooks/context";
-import { mutateSourceNode } from "./process";
+import { connect, disconnect, mutateSourceNode } from "./process";
 import type { PatchObject } from "./utility-types";
 
+export interface NodeExpando {
+  readonly id: number;
+
+  /**
+   * If this value is `null`, then the node is disconnected.
+   */
+  consumers: Set<TransformNode> | null;
+}
+
+export interface TransformNodeExpando extends NodeExpando {
+  readonly hookProps: HookPropsMap;
+  readonly hookState: HookStateMap;
+}
+
+/**
+ * Only exported for use in module `../nodes.tsx`.
+ */
 const nodeExpandos = new WeakMap<Node, NodeExpando | TransformNodeExpando>();
 
 export function getNodeExpando(node: SourceNode): NodeExpando;
 export function getNodeExpando(node: TransformNode): TransformNodeExpando;
 export function getNodeExpando(node: Node) {
   return nodeExpandos.get(node);
-}
-
-export interface NodeExpando {
-  readonly id: number;
-  readonly consumers: Set<TransformNode>;
-}
-
-export interface TransformNodeExpando extends NodeExpando {
-  readonly hookProps: HookPropsMap;
-  readonly hookState: HookStateMap;
 }
 
 let nextNodeId = 0;
@@ -28,57 +35,24 @@ let nextNodeId = 0;
 export abstract class Node<P = unknown> {
   constructor() {
     const id = nextNodeId++;
-    const consumers = new Set<TransformNode>();
     if (this instanceof TransformNode) {
       nodeExpandos.set(this, {
         id,
-        consumers,
+        consumers: null,
         hookProps: new Map(),
         hookState: new Map(),
       });
     } else {
-      nodeExpandos.set(this, { id, consumers });
+      nodeExpandos.set(this, { id, consumers: new Set<TransformNode>() });
     }
-  }
-
-  #suspended = true;
-
-  get suspended(): boolean {
-    return this.#suspended;
-  }
-
-  /**
-   * Suspends this node and all transitive `consumers`.
-   */
-  suspend(): void {
-    this.#suspended = true;
-    for (const consumer of nodeExpandos.get(this)!.consumers) {
-      consumer.suspend();
-    }
-  }
-
-  /**
-   * Resumes this node, but doesn't resume any of its `consumers`.
-   */
-  resume(): void {
-    this.#suspended = false;
   }
 
   /**
    * Returns all nodes that have this node as an input and are not suspended.
    */
   get consumers(): TransformNode[] {
-    return [...nodeExpandos.get(this)!.consumers];
-  }
-
-  /**
-   * Throws an error if this node has not been initialized, or has been
-   * disconnected. Should be called by subclasses in any data accessor method.
-   */
-  protected _assertNotSuspended(): void {
-    if (this.#suspended) {
-      throw new Error("Can't read from suspended nodes.");
-    }
+    const consumers = nodeExpandos.get(this)!.consumers;
+    return consumers ? [...consumers] : [];
   }
 
   /**
@@ -108,7 +82,6 @@ export abstract class SourceNode<P = unknown> extends Node<P> {
    * consumers no longer need to be re-rendered.
    */
   protected _setState(callback: (patch: P) => P | null): void {
-    this._assertNotSuspended();
     mutateSourceNode(this, callback);
   }
 }
@@ -129,47 +102,41 @@ export abstract class TransformNode<
 
   #dependencies: D;
 
-  get dependencies() {
+  get dependencies(): D {
     return this.#dependencies;
   }
 
-  // TODO: Rename to "disconnect", run all effect cleanups
-  suspend() {
-    if (this.suspended) return;
-    for (const dependency of Object.values(this.#dependencies) as Node[]) {
-      nodeExpandos.get(dependency)!.consumers.delete(this);
-    }
-    super.suspend();
+  get connected(): boolean {
+    return !!nodeExpandos.get(this)!.consumers;
   }
 
-  resume() {
-    if (!this.suspended) return;
-    if (process !== null) {
-      throw new Error("Can't resume inside a transaction.");
-    }
-    const dependencies: Node[] = Object.values(this.#dependencies);
-    for (const dependency of dependencies) {
-      if (dependency.suspended) {
-        throw new Error(
-          "Can't resume this node because one of its dependencies is "
-        );
-      }
-    }
-    for (const dependency of dependencies) {
-      nodeExpandos.get(dependency)!.consumers.add(this);
-    }
-    super.resume();
-    try {
-      // TODO: process.run()
-    } catch (e) {
-      this.suspend();
-      throw e;
+  connect() {
+    connect(this);
+  }
+
+  disconnect() {
+    disconnect(this);
+  }
+
+  /**
+   * Throws an error if this node has not been initialized, or has been
+   * disconnected. Should be called by subclasses in any data accessor method.
+   */
+  protected _assertConnected(): void {
+    if (!this.connected) {
+      throw new Error("Can't read from disconnected nodes.");
     }
   }
 
-  abstract _initialize(
-    hookRenderer: <R>(key: K, callback?: () => R) => R
-  ): void;
+  /**
+   *
+   */
+  abstract _initialize(hookRenderer: <R>(key: K, callback?: () => R) => R): P;
+
+  /**
+   *
+   */
+  abstract _clear(): void;
 
   /**
    * Calling `hookRenderer` without a callback marks the key as removed and runs
@@ -179,5 +146,5 @@ export abstract class TransformNode<
     dependencies: PatchObject<D>,
     dirtyKeys: Set<K>,
     hookRenderer: <R>(key: K, callback?: () => R) => R
-  ): P;
+  ): P | null;
 }

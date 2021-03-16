@@ -11,8 +11,18 @@ interface Process {
   /**
    * Nodes that have been connected and must now be initialized.
    */
-  uninitialized: Set<TransformNode>;
+  connected: Set<TransformNode>;
 
+  /**
+   * Nodes that have been disconnected and must now be cleaned up.
+   */
+  disconnected: Set<TransformNode>;
+
+  /**
+   * Stores the patches created by `SourceNode._createPatch()`/
+   * `SourceNode._setState()` and `TransformNode._initialize()`/
+   * `TransformNode._render()`.
+   */
   patches: Map<Node, any>;
 
   /**
@@ -23,56 +33,91 @@ interface Process {
   scheduledEffectCleanups: (() => void)[];
   scheduledEffects: (() => void)[];
 
-  handleError?(error: any): void;
+  /**
+   *
+   */
+  onError(error: any): void;
 }
 
-function createProcess(handleError?: Process["handleError"]): Process {
-  return {
+let process: Process | null = null;
+
+export function transaction<R>(
+  callback: () => R,
+  onError: Process["onError"] = console.error
+): R {
+  if (process) {
+    throw new Error("Calls to `transaction()` can't be nested.");
+  }
+  process = {
     phase: "mutate",
-    uninitialized: new Set(),
+    connected: new Set(),
+    disconnected: new Set(),
     patches: new Map(),
     hookProps: new Map(),
     hookState: new Map(),
     scheduledEffectCleanups: [],
     scheduledEffects: [],
-    handleError,
+    onError,
   };
+  try {
+    const result = callback();
+    if (
+      process.patches.size !== 0 ||
+      process.hookProps.size !== 0 ||
+      process.connected.size !== 0 ||
+      process.disconnected.size !== 0
+    ) {
+      render();
+      commit();
+      effect();
+    }
+    return result;
+  } finally {
+    process = null;
+  }
 }
 
-let process: Process | null = null;
+export declare namespace transaction {
+  const inProgress: boolean;
+}
+
+Object.defineProperty(transaction, "inProgress", {
+  get() {
+    return !!process;
+  },
+});
 
 /**
  *
  */
-export function transaction<R>(
-  callback: () => R,
-  handleError?: (error: any) => void
-): R {
-  if (process) {
-    throw new Error();
+function assertMutatePhase(): void {
+  switch (process!.phase) {
+    case "render":
+    case "commit":
+    case "effect":
+      throw new Error("Can't call setState() during render or effect phase.");
   }
-  process = createProcess(handleError);
-  let result: R;
-  mutateNode(() => {
-    result = callback();
-  });
-  return result!;
 }
 
+/**
+ *
+ */
 export function mutateSourceNode<P, T extends SourceNode<P>>(
   node: T,
   setStateCallback: (patch: P) => P | null
 ): void {
-  mutateNode(() => {
-    const patch = setStateCallback(
-      process!.patches.get(node) ?? node._createPatch()
-    );
-    if (patch) {
-      process!.patches.set(node, patch);
-    } else {
-      process!.patches.delete(node);
-    }
-  });
+  if (!process) {
+    return transaction(() => mutateSourceNode(node, setStateCallback));
+  }
+  assertMutatePhase();
+
+  const { patches } = process;
+  const patch = setStateCallback(patches.get(node) ?? node._createPatch());
+  if (patch) {
+    patches.set(node, patch);
+  } else {
+    patches.delete(node);
+  }
 }
 
 /**
@@ -86,11 +131,22 @@ export function mutateTransformNode<T>(
   setStateCallback: any,
   stateIndex: number,
   value: T | ((previous: T) => T)
-) {
-  if (node.suspended) {
-    throw new Error("Can't modify a suspended node.");
+): void {
+  if (!process) {
+    return transaction(() =>
+      mutateTransformNode(
+        node,
+        key,
+        hookIndex,
+        setStateCallback,
+        stateIndex,
+        value
+      )
+    );
   }
-  const expando = getNodeExpando(node)!;
+  assertMutatePhase();
+
+  const expando = getNodeExpando(node);
   const hookProps = expando.hookProps.get(key)?.[hookIndex];
   if (
     !hookProps ||
@@ -100,69 +156,65 @@ export function mutateTransformNode<T>(
     throw new Error("You used a stale `setState()` callback.");
   }
 
-  mutateNode(() => {
-    const lastHookState = expando.hookState.get(key)!;
-    let nextHookState = process!.hookState.get(node);
+  const lastHookState = expando.hookState.get(key)!;
+  let nextHookState = process!.hookState.get(node);
 
-    let nextValue: T;
-    if (value instanceof Function) {
-      const lastValue =
-        nextHookState && nextHookState.has(stateIndex)
-          ? nextHookState.get(stateIndex)
-          : lastHookState[stateIndex];
-      nextValue = value(lastValue);
-    } else {
-      nextValue = value;
-    }
+  let nextValue: T;
+  if (value instanceof Function) {
+    const lastValue =
+      nextHookState && nextHookState.has(stateIndex)
+        ? nextHookState.get(stateIndex)
+        : lastHookState[stateIndex];
+    nextValue = value(lastValue);
+  } else {
+    nextValue = value;
+  }
 
-    if (Object.is(nextValue, lastHookState[stateIndex])) {
-      if (nextHookState) {
-        nextHookState.delete(stateIndex);
-        if (nextHookState.size === 0) process!.hookState.delete(node);
-      }
-    } else {
-      if (!nextHookState) {
-        nextHookState = new Map();
-        process!.hookState.set(node, nextHookState);
-      }
-      nextHookState.set(stateIndex, nextValue);
+  if (Object.is(nextValue, lastHookState[stateIndex])) {
+    if (nextHookState) {
+      nextHookState.delete(stateIndex);
+      if (nextHookState.size === 0) process!.hookState.delete(node);
     }
-  });
+  } else {
+    if (!nextHookState) {
+      nextHookState = new Map();
+      process!.hookState.set(node, nextHookState);
+    }
+    nextHookState.set(stateIndex, nextValue);
+  }
 }
 
 /**
- * Renders all nodes that whose state changed, and if no errors occured during
- * rendering, commits the changes to the nodes and executes effects. `process`
- * must not be `null` when this method is called.
+ *
  */
-function mutateNode(callback: () => void): void {
-  if (process) {
-    switch (process.phase) {
-      case "mutate":
-        callback();
-        return;
-      case "render":
-      case "commit":
-      case "effect":
-        throw new Error("Can't call setState() during render or effect phase.");
-    }
+export function connect(node: TransformNode): void {
+  if (!process) {
+    return transaction(() => connect(node));
   }
+  assertMutatePhase();
 
-  process = createProcess();
-  try {
-    if (process!.patches.size === 0 && process!.hookProps.size === 0) return;
-    process!.phase = "render";
-    render();
-    process!.phase = "commit";
-    commit();
-    process!.phase = "effect";
-    effect();
-  } finally {
-    process = null;
-  }
+  process.connected.add(node);
+  process.disconnected.delete(node);
 }
 
+/**
+ *
+ */
+export function disconnect(node: TransformNode): void {
+  if (!process) {
+    return transaction(() => disconnect(node));
+  }
+  assertMutatePhase();
+
+  process.connected.delete(node);
+  process.disconnected.add(node);
+}
+
+/**
+ *
+ */
 function render() {
+  process!.phase = "render";
   const dirty = new FlatQueue<TransformNode>();
   const discovered = new Set<TransformNode>();
   for (const sourceNode of process!.patches.keys()) {
@@ -171,7 +223,7 @@ function render() {
     }
   }
   for (const node of process!.hookProps.keys()) {
-    dirty.push(nodeIds.get(node)!, node);
+    dirty.push(getNodeExpando(node).id, node);
   }
   for (;;) {
     const node = dirty.peekValue();
@@ -214,6 +266,7 @@ function render() {
 }
 
 function commit() {
+  process!.phase = "commit";
   for (const [node, patch] of process!.patches) {
     node._commit(patch);
   }
@@ -223,19 +276,20 @@ function commit() {
 }
 
 function effect() {
-  const handleError = process!.handleError ?? console.error;
-  for (const callback of process!.scheduledEffectCleanups) {
+  process!.phase = "effect";
+  const { scheduledEffectCleanups, scheduledEffects, onError } = process!;
+  for (const callback of scheduledEffectCleanups) {
     try {
       callback();
     } catch (e) {
-      handleError(e);
+      onError(e);
     }
   }
-  for (const callback of process!.scheduledEffects) {
+  for (const callback of scheduledEffects) {
     try {
       callback();
     } catch (e) {
-      handleError(e);
+      onError(e);
     }
   }
 }
