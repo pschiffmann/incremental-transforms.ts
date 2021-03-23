@@ -77,12 +77,6 @@ export abstract class NodeBase<P = unknown> {
  */
 export abstract class SourceNode<P = unknown> extends NodeBase<P> {
   /**
-   * Returns an empty patch object that is then modified by `_setState()`
-   * callbacks.
-   */
-  abstract _createPatch(): P;
-
-  /**
    * Inspired by: https://api.flutter.dev/flutter/widgets/State/setState.html
    *
    * `callback` may modify the passed-in patch object in place, or return a new
@@ -90,7 +84,7 @@ export abstract class SourceNode<P = unknown> extends NodeBase<P> {
    * node, or that all previous changes in `patch` have been reverted and
    * consumers no longer need to be re-rendered.
    */
-  protected _setState(callback: (patch: P) => P | null): void {
+  protected _setState(callback: (patch?: P) => P | null): void {
     mutateSourceNode(this, callback);
   }
 }

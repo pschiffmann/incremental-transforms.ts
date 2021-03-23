@@ -4,7 +4,7 @@ export type ExtractOpaqueValueType<T> = T extends OpaqueValue<infer R>
   ? R
   : never;
 
-export interface OpaqueValue<T> extends Node<OpaqueValuePatch<T>> {
+export interface OpaqueValue<T> {
   get(): T;
 }
 
@@ -14,9 +14,12 @@ export interface OpaqueValuePatch<T> {
 
 export abstract class OpaqueValueTransformBase<
   T,
-  D extends {} = {},
-  P extends OpaqueValuePatch<T> = OpaqueValuePatch<T>
-> extends TransformNode<D, P> {
+  D extends {} = {}
+> extends TransformNode<D, OpaqueValuePatch<T>> {
+  constructor(dependencies: D) {
+    super(dependencies);
+  }
+
   #value: T | null = null;
 
   get(): T {
@@ -24,7 +27,14 @@ export abstract class OpaqueValueTransformBase<
     return this.#value!;
   }
 
-  _commit(patch: P): void {
+  _commit(patch: OpaqueValuePatch<T>): void {
     this.#value = patch.value;
+  }
+
+  /**
+   * Called during the `commit` phase after this node has been disconnected.
+   */
+  _clear(): void {
+    this.#value = null;
   }
 }

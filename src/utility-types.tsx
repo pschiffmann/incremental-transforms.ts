@@ -1,4 +1,4 @@
-import type { Node } from "./nodes";
+import type { Node, SourceNode, TransformNode } from "./nodes";
 import { ExtractOpaqueValueType, OpaqueValue } from "./opaque-value/base";
 
 /**
@@ -12,7 +12,11 @@ export type PatchObject<D extends {}> = {
 /**
  * If `T` is a `Node`, resolves its `P` type parameter.
  */
-export type ExtractPatchType<T> = T extends Node<infer P> ? P : never;
+export type ExtractPatchType<T> = T extends SourceNode<infer P>
+  ? P
+  : T extends TransformNode<any, infer P, any>
+  ? P
+  : never;
 
 /**
  * Creates a type with the same keys as `C` except those listed in `R`, and

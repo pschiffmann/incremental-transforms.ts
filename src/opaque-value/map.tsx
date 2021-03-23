@@ -1,61 +1,60 @@
+import { HookRenderer } from "../nodes";
 import { ExtractContextValues, PatchObject } from "../utility-types";
 import type { OpaqueValuePatch } from "./base";
 import { OpaqueValue, OpaqueValueTransformBase } from "./base";
 
-export type MappedOpaqueValueCallback<I, O, C extends {}> = (
-  self: I,
-  context: ExtractContextValues<C, "self">
-) => O;
+export type MappedOpaqueValueCallback<I, O> = (self: I) => O;
 
-type MappedOpaqueValueDependencies<I, C extends {}> = {
+interface MappedOpaqueValueDependencies<I> {
   readonly self: OpaqueValue<I>;
-} & Omit<C, "self">;
+}
 
-export function map<I, O, C extends {}>(
+export function map<I, O>(
   self: OpaqueValue<I>,
-  callback: MappedOpaqueValueCallback<I, O, C>,
-  context?: C
+  callback: MappedOpaqueValueCallback<I, O>
 ): OpaqueValue<O> {
-  const node = new MappedOpaqueValue(self, callback, context ?? ({} as C));
+  const node = new MappedOpaqueValue(self, callback);
   node.connect();
   return node;
 }
 
-export class MappedOpaqueValue<
-  I,
+export class MappedOpaqueValue<I, O> extends OpaqueValueTransformBase<
   O,
-  C extends {}
-> extends OpaqueValueTransformBase<O, MappedOpaqueValueDependencies<I, C>> {
-  constructor(
-    self: OpaqueValue<I>,
-    callback: MappedOpaqueValueCallback<I, O, C>,
-    context: C
-  ) {
-    super({ self, ...context });
+  MappedOpaqueValueDependencies<I>
+> {
+  constructor(self: OpaqueValue<I>, callback: MappedOpaqueValueCallback<I, O>) {
+    super({ self });
     this.#callback = callback;
-
-    if (context.hasOwnProperty("self")) {
-      throw new Error(
-        "The reserved keyword `self` can't be used as a context key."
-      );
-    }
   }
 
-  #callback: MappedOpaqueValueCallback<I, O, C>;
+  #callback: MappedOpaqueValueCallback<I, O>;
 
-  _render(
-    patch: PatchObject<MappedOpaqueValueDependencies<I, C>>
+  _initialize(
+    dependencies: PatchObject<MappedOpaqueValueDependencies<I>>,
+    hookRenderer: HookRenderer<"self">
   ): OpaqueValuePatch<O> {
-    const context: any = {};
-    for (const [key, node] of Object.entries(this.dependencies)) {
-      if (key === "self") continue;
-      context[key] =
-        ((patch as any)[key] as OpaqueValuePatch<any>).value ?? node.get();
-    }
-    const result = this.#callback(
-      patch.self.value ?? this.dependencies.self.get(),
-      context
+    const value = hookRenderer("self", () =>
+      this.#callback(
+        dependencies ? dependencies.self : this.dependencies.self.get()
+      )
     );
-    return { value: result };
+    return { value };
+  }
+
+  /**
+   * Calling `hookRenderer` without a callback marks the key as removed and runs
+   * all cleanup effects.
+   */
+  _render(
+    dependencies: PatchObject<MappedOpaqueValueDependencies<I>>,
+    dirtyKeys: Set<"self">,
+    hookRenderer: HookRenderer<"self">
+  ): OpaqueValuePatch<O> | null {
+    const value = hookRenderer("self", () =>
+      this.#callback(
+        dependencies ? dependencies.self : this.dependencies.self.get()
+      )
+    );
+    return Object.is(this.get(), value) ? null : { value };
   }
 }

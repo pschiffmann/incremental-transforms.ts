@@ -1,18 +1,12 @@
 import { OpaqueValue, OpaqueValuePatch } from "./base";
-import { _addNode, Node, SourceNode } from "../core";
+import { Node, SourceNode } from "../nodes";
 
 export function mutable<T>(initialValue: T): OpaqueValue<T> {
-  const node = new MutableOpaqueValue(initialValue);
-  _addNode(node);
-  return node;
-}
-
-interface MutableOpaqueValuePatch<T> extends OpaqueValuePatch<T> {
-  value: T;
+  return new MutableOpaqueValue(initialValue);
 }
 
 export class MutableOpaqueValue<T>
-  extends SourceNode<MutableOpaqueValuePatch<T>>
+  extends SourceNode<OpaqueValuePatch<T>>
   implements OpaqueValue<T> {
   constructor(initialValue: T) {
     super();
@@ -22,19 +16,16 @@ export class MutableOpaqueValue<T>
   #value: T;
 
   get(): T {
-    this._assertConnected();
     return this.#value;
   }
 
   set(value: T): void {
-    this._setState((patch) => (patch.value = value));
+    this._setState((patch) =>
+      Object.is(this.#value, value) ? null : { value }
+    );
   }
 
-  protected _createPatch(): MutableOpaqueValuePatch<T> {
-    return { value: null as any };
-  }
-
-  protected _commit(patch: MutableOpaqueValuePatch<T>): void {
+  _commit(patch: OpaqueValuePatch<T>): void {
     this.#value = patch.value;
   }
 }

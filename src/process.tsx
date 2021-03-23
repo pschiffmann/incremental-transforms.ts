@@ -159,7 +159,7 @@ export function mutateSourceNode<P, T extends SourceNode<P>>(
   assertMutatePhase();
 
   const { patches } = process;
-  const patch = setStateCallback(patches.get(node) ?? node._createPatch());
+  const patch = setStateCallback(patches.get(node));
   if (patch) {
     patches.set(node, patch);
   } else {
