@@ -1,27 +1,33 @@
-import { HookPropsMap, HookStateMap } from "./hooks/context";
+import { HookPropsMap, HookStateMap } from "./hooks";
 import { connect, disconnect, mutateSourceNode } from "./process";
 import type { PatchObject } from "./utility-types";
 
-export interface NodeExpando {
+export type Node = SourceNode | TransformNode;
+
+export type HookRenderer<K = unknown> = <R>(key: K, callback?: () => R) => R;
+
+export interface SourceNodeExpando {
+  readonly id: number;
+  readonly consumers: Set<TransformNode>;
+}
+
+export interface TransformNodeExpando {
   readonly id: number;
 
   /**
    * If this value is `null`, then the node is disconnected.
    */
   consumers: Set<TransformNode> | null;
-}
-
-export interface TransformNodeExpando extends NodeExpando {
   readonly hookProps: HookPropsMap;
   readonly hookState: HookStateMap;
 }
 
-/**
- * Only exported for use in module `../nodes.tsx`.
- */
-const nodeExpandos = new WeakMap<Node, NodeExpando | TransformNodeExpando>();
+const nodeExpandos = new WeakMap<
+  Node,
+  SourceNodeExpando | TransformNodeExpando
+>();
 
-export function getNodeExpando(node: SourceNode): NodeExpando;
+export function getNodeExpando(node: SourceNode): SourceNodeExpando;
 export function getNodeExpando(node: TransformNode): TransformNodeExpando;
 export function getNodeExpando(node: Node) {
   return nodeExpandos.get(node);
@@ -32,7 +38,7 @@ let nextNodeId = 0;
 /**
  *
  */
-export abstract class Node<P = unknown> {
+export abstract class NodeBase<P = unknown> {
   constructor() {
     const id = nextNodeId++;
     if (this instanceof TransformNode) {
@@ -43,7 +49,10 @@ export abstract class Node<P = unknown> {
         hookState: new Map(),
       });
     } else {
-      nodeExpandos.set(this, { id, consumers: new Set<TransformNode>() });
+      nodeExpandos.set((this as unknown) as SourceNode, {
+        id,
+        consumers: new Set(),
+      });
     }
   }
 
@@ -51,7 +60,7 @@ export abstract class Node<P = unknown> {
    * Returns all nodes that have this node as an input and are not suspended.
    */
   get consumers(): TransformNode[] {
-    const consumers = nodeExpandos.get(this)!.consumers;
+    const consumers = nodeExpandos.get((this as unknown) as Node)!.consumers;
     return consumers ? [...consumers] : [];
   }
 
@@ -66,7 +75,7 @@ export abstract class Node<P = unknown> {
  * A source node has setter methods that can be used to mutate the object
  * directly. It has no dependencies.
  */
-export abstract class SourceNode<P = unknown> extends Node<P> {
+export abstract class SourceNode<P = unknown> extends NodeBase<P> {
   /**
    * Returns an empty patch object that is then modified by `_setState()`
    * callbacks.
@@ -94,7 +103,7 @@ export abstract class TransformNode<
   D extends {} = {},
   P = unknown,
   K = unknown
-> extends Node<P> {
+> extends NodeBase<P> {
   constructor(dependencies: D) {
     super();
     this.#dependencies = Object.freeze(dependencies);
@@ -110,10 +119,18 @@ export abstract class TransformNode<
     return !!nodeExpandos.get(this)!.consumers;
   }
 
+  /**
+   * Connects this node to its `dependencies`. If the node is already
+   * `connected` or any dependency is not connected, does nothing.
+   */
   connect() {
     connect(this);
   }
 
+  /**
+   * Disconnects this node from its `dependencies`. All consumers of this node
+   * are disconnected as well. If this node is not `connected`, does nothing.
+   */
   disconnect() {
     disconnect(this);
   }
@@ -131,10 +148,13 @@ export abstract class TransformNode<
   /**
    *
    */
-  abstract _initialize(hookRenderer: <R>(key: K, callback?: () => R) => R): P;
+  abstract _initialize(
+    dependencies: PatchObject<D>,
+    hookRenderer: HookRenderer<K>
+  ): P;
 
   /**
-   *
+   * Called during the `commit` phase after this node has been disconnected.
    */
   abstract _clear(): void;
 
@@ -145,6 +165,6 @@ export abstract class TransformNode<
   abstract _render(
     dependencies: PatchObject<D>,
     dirtyKeys: Set<K>,
-    hookRenderer: <R>(key: K, callback?: () => R) => R
+    hookRenderer: HookRenderer<K>
   ): P | null;
 }

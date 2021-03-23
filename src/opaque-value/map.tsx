@@ -17,9 +17,7 @@ export function map<I, O, C extends {}>(
   context?: C
 ): OpaqueValue<O> {
   const node = new MappedOpaqueValue(self, callback, context ?? ({} as C));
-  try {
-    node.resume();
-  } catch (e) {}
+  node.connect();
   return node;
 }
 
