@@ -1,86 +1,31 @@
-import { HookRenderer, TransformNode } from "./nodes";
 import { mutateTransformNode } from "./process";
-
-export type HookProps =
-  | EffectHookProps
-  | MemoHookProps
-  | RefHookProps
-  | StateHookProps;
-
-export interface EffectHookProps {
-  readonly type: "effect";
-
-  /**
-   * The cleanup function returned by this effect. It is filled in during the
-   * `effect` phase.
-   */
-  cleanup: (() => void) | null;
-
-  readonly deps: any[] | undefined;
-}
-
-export interface MemoHookProps {
-  readonly type: "memo";
-  readonly result: any;
-  readonly deps: any[];
-}
-
-export interface RefHookProps {
-  readonly type: "ref";
-  readonly ref: RefObject<any>;
-}
-
-export interface StateHookProps {
-  readonly type: "state";
-  readonly setState: SetStateCallback<any>;
-}
-
-export interface RefObject<T> {
-  current: T;
-}
-
-export type SetStateCallback<T> = (value: T | ((prev: T) => T)) => void;
-
-export type HookPropsMap = Map<any, HookProps[]>;
-export type HookStateMap = Map<any, Map<number, any>>;
-export type HookPropsPatch = Map<any, HookProps[] | null>;
-export type HookStatePatch = Map<any, Map<number, any>>;
-
-let hookContext: HookContext | null = null;
-
+let hookContext = null;
 /**
  * Returns a (hookRenderer, nextHookProps, effectCleanups, effects) tuple.
  * Modifies `newHookState` in-place.
  */
 export function createHookRenderer(
-  node: TransformNode,
-  oldHookProps: HookPropsMap,
-  oldHookState: HookStateMap,
-  newHookState: HookStatePatch | null
-): {
-  hookRenderer: HookRenderer;
-  newHookProps: HookPropsPatch;
-  effectCleanups: (() => void)[];
-  effects: (() => void)[];
-} {
-  const newHookProps: HookPropsPatch = new Map();
-  const effectCleanups: (() => void)[] = [];
-  const effects: (() => void)[] = [];
-
-  const hookRenderer: HookRenderer = (key, callback) => {
+  node,
+  oldHookProps,
+  oldHookState,
+  newHookState
+) {
+  const newHookProps = new Map();
+  const effectCleanups = [];
+  const effects = [];
+  const hookRenderer = (key, callback) => {
     if (newHookProps.has(key)) {
       throw new Error("This key has already been rendered.");
     }
     if (!callback) {
       newHookProps.set(key, null);
-      return undefined as any;
+      return undefined;
     }
-
     if (oldHookProps.has(key)) {
-      hookContext = new UpdateContext(oldHookProps.get(key)!, (stateIndex) =>
+      hookContext = new UpdateContext(oldHookProps.get(key), (stateIndex) =>
         newHookState?.has(stateIndex)
-          ? newHookState.get(stateIndex)!
-          : oldHookState.get(stateIndex)!
+          ? newHookState.get(stateIndex)
+          : oldHookState.get(stateIndex)
       );
     } else {
       hookContext = new MountContext(node, key);
@@ -102,23 +47,22 @@ export function createHookRenderer(
       hookContext = null;
     }
   };
-
   return { hookRenderer, newHookProps, effectCleanups, effects };
 }
-
 /**
  *
  */
-abstract class HookContext {
-  readonly newHookProps: HookProps[] = [];
-  readonly effects: (() => void)[] = [];
-
-  #executing: "memo" | "state" | null = null;
-
+class HookContext {
+  constructor() {
+    this.newHookProps = [];
+    this.effects = [];
+    this.#executing = null;
+  }
+  #executing;
   /**
    *
    */
-  executeCallback<R>(hook: "memo" | "state", callback: () => R): R {
+  executeCallback(hook, callback) {
     this.#executing = hook;
     // We don't need a try/finally here because if an error is thrown, the whole
     // transaction is aborted anyways.
@@ -126,28 +70,22 @@ abstract class HookContext {
     this.#executing = null;
     return result;
   }
-
-  useEffect(callback: () => void | (() => void), deps?: any[]): void {
-    const props: EffectHookProps = { type: "effect", cleanup: null, deps };
+  useEffect(callback, deps) {
+    const props = { type: "effect", cleanup: null, deps };
     this.newHookProps.push(props);
     this.effects.push(() => {
       props.cleanup = callback() || null;
     });
   }
-
-  useMemo<R>(callback: () => R, deps: any[]): R {
+  useMemo(callback, deps) {
     const result = this.executeCallback("memo", callback);
     this.newHookProps.push({ type: "memo", result, deps });
     return result;
   }
-
-  abstract useRef<T>(initialValue: T): RefObject<T>;
-  abstract useState<T>(initializer: T | (() => T)): [T, SetStateCallback<T>];
-
   /**
    *
    */
-  static get current(): HookContext {
+  static get current() {
     if (!hookContext) {
       throw new Error("Hooks may only be called by render functions.");
     }
@@ -160,77 +98,53 @@ abstract class HookContext {
     return hookContext;
   }
 }
-
 /**
  *
  */
 class MountContext extends HookContext {
-  constructor(node: TransformNode, key: any) {
+  constructor(node, key) {
     super();
+    this.newHookState = new Map();
     this.node = node;
     this.key = key;
   }
-
-  readonly node: TransformNode;
-  readonly key: any;
-  readonly newHookState = new Map<number, any>();
-
-  useRef<T>(initialValue: T): RefObject<T> {
-    const ref: RefObject<T> = { current: initialValue };
+  useRef(initialValue) {
+    const ref = { current: initialValue };
     this.newHookProps.push({ type: "ref", ref });
     return ref;
   }
-
-  useState<T>(initializer: T | (() => T)): [T, SetStateCallback<T>] {
+  useState(initializer) {
     const { node, key } = this;
     const hookIndex = this.newHookProps.length;
     const state =
       initializer instanceof Function
         ? this.executeCallback("state", initializer)
         : initializer;
-    const setState: SetStateCallback<T> = (value) =>
+    const setState = (value) =>
       mutateTransformNode(node, key, hookIndex, setState, value);
-
     this.newHookProps.push({ type: "state", setState });
     this.newHookState.set(hookIndex, state);
     return [state, setState];
   }
 }
-
 /**
  *
  */
 class UpdateContext extends HookContext {
-  constructor(
-    oldHookProps: HookProps[],
-    getHookState: (stateIndex: number) => any
-  ) {
+  constructor(oldHookProps, getHookState) {
     super();
+    this.effectCleanups = [];
     this.oldHookProps = oldHookProps;
     this.getHookState = getHookState;
   }
-
-  readonly oldHookProps: HookProps[];
-  readonly effectCleanups: (() => void)[] = [];
-
-  /**
-   * Returns the value of the nth `useState()` hook.
-   */
-  readonly getHookState: (stateIndex: number) => any;
-
-  getOldHookProps(type: "memo"): MemoHookProps;
-  getOldHookProps(type: "effect"): EffectHookProps;
-  getOldHookProps(type: "ref"): RefHookProps;
-  getOldHookProps(type: "state"): StateHookProps;
-  getOldHookProps(type: HookProps["type"]): HookProps {
+  getOldHookProps(type) {
     const result = this.oldHookProps[this.newHookProps.length];
     if (result?.type !== type) {
       throw new Error("Hooks must always be called in the same order.");
     }
     return result;
   }
-
-  useEffect(callback: () => void | (() => void), deps?: any[]): void {
+  useEffect(callback, deps) {
     const props = this.getOldHookProps("effect");
     if (depsEqual(props.deps, deps)) {
       this.newHookProps.push(props);
@@ -239,8 +153,7 @@ class UpdateContext extends HookContext {
       super.useEffect(callback, deps);
     }
   }
-
-  useMemo<R>(callback: () => R, deps: any[]): R {
+  useMemo(callback, deps) {
     const props = this.getOldHookProps("memo");
     if (depsEqual(props.deps, deps)) {
       this.newHookProps.push(props);
@@ -249,14 +162,12 @@ class UpdateContext extends HookContext {
       return super.useMemo(callback, deps);
     }
   }
-
-  useRef<T>(): RefObject<T> {
+  useRef() {
     const props = this.getOldHookProps("ref");
     this.newHookProps.push(props);
     return props.ref;
   }
-
-  useState<T>(): [T, SetStateCallback<T>] {
+  useState() {
     const hookIndex = this.newHookProps.length;
     const state = this.getHookState(hookIndex);
     const props = this.getOldHookProps("state");
@@ -264,44 +175,34 @@ class UpdateContext extends HookContext {
     return [state, props.setState];
   }
 }
-
 /**
  *
  */
-export function useEffect(
-  callback: () => void | (() => void),
-  deps?: any[]
-): void {
+export function useEffect(callback, deps) {
   return HookContext.current.useEffect(callback, deps);
 }
-
 /**
  *
  */
-export function useMemo<R>(callback: () => R, deps: any[]): R {
+export function useMemo(callback, deps) {
   return HookContext.current.useMemo(callback, deps);
 }
-
 /**
  *
  */
-export function useRef<T>(initialValue: T): RefObject<T> {
+export function useRef(initialValue) {
   return HookContext.current.useRef(initialValue);
 }
-
 /**
  *
  */
-export function useState<T>(
-  initializer: T | (() => T)
-): [T, SetStateCallback<T>] {
+export function useState(initializer) {
   return HookContext.current.useState(initializer);
 }
-
 /**
  *
  */
-function depsEqual(a?: any[], b?: any[]): boolean {
+function depsEqual(a, b) {
   if (!a || !b) return false;
   if (a === b) return true;
   const l = a.length;
