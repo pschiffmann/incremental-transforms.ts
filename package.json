@@ -2,25 +2,19 @@
   "name": "incremental-transforms",
   "version": "0.1.0",
   "private": true,
-  "license": "UNLICENSED",
   "scripts": {
-    "test": "jest",
-    "bundle": "rollup --config",
-    "generate-types": "tsc -b src/core src/opaque-value"
+    "test": "jest"
   },
   "dependencies": {
-    "@babel/runtime": "^7.13.10",
     "flatqueue": "^1.2.1"
   },
   "devDependencies": {
-    "@babel/cli": "^7.13.10",
-    "@babel/core": "^7.13.10",
-    "@babel/preset-env": "^7.13.12",
-    "@babel/plugin-proposal-class-properties": "^7.13.0",
-    "@babel/plugin-transform-runtime": "^7.13.10",
-    "@rollup/plugin-alias": "^3.1.2",
-    "@rollup/plugin-babel": "^5.3.0",
-    "rollup": "^2.42.3",
+    "@babel/core": "^7.11.6",
+    "@babel/preset-env": "^7.11.5",
+    "@babel/preset-typescript": "^7.10.4",
+    "@types/jest": "^26.0.13",
+    "babel-jest": "^26.3.0",
+    "jest": "^26.4.2",
     "typescript": "^4.2.3",
     "prettier": "2.2.1"
   }

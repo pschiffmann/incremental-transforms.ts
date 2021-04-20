@@ -1,13 +1,16 @@
 {
   "include": ["src/**/*"],
-
   "compilerOptions": {
-    "declaration": true,
-    "outDir": "./src2",
-
-    "jsx": "react",
-    "moduleResolution": "node",
     "strict": true,
-    "target": "ESNext"
+    "module": "commonjs",
+    "jsx": "preserve",
+    "esModuleInterop": true,
+    "sourceMap": true,
+    "allowJs": true,
+    "lib": ["esnext"],
+    "downlevelIteration": true,
+    "target": "ES2018",
+    "rootDir": "src",
+    "moduleResolution": "node"
   }
 }
