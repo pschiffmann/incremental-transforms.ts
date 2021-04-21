@@ -270,6 +270,7 @@ function resolveConnectedDisconnected() {
   for (;;) {
     const node = queue.peekValue();
     if (!node) break;
+    queue.pop();
     const dependencies = Object.values<Node>(node.dependencies);
     const dependenciesConnected = dependencies.every(
       (dep) =>

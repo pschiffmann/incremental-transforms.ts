@@ -1,5 +1,5 @@
 import { OpaqueValue, OpaqueValuePatch } from "./base";
-import { Node, SourceNode } from "../nodes";
+import { Node, SourceNode } from "../core";
 
 export function mutable<T>(initialValue: T): OpaqueValue<T> {
   return new MutableOpaqueValue(initialValue);

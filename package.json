@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./core": "./dist/core.js"
+    "./core": "./dist/core/index.js",
+    "./map": "./dist/map/index.js",
+    "./opaque-value": "./dist/opaque-value/index.js"
   },
   "scripts": {
     "dev": "npm-run-all -p watch:*",
@@ -13,6 +15,7 @@
     "format": "prettier --write ."
   },
   "dependencies": {
+    "@babel/runtime": "^7.13.17",
     "flatqueue": "^1.2.1"
   },
   "devDependencies": {
