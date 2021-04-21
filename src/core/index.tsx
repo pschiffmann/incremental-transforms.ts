@@ -1,3 +1,4 @@
 export { useEffect, useMemo, useRef, useState } from "./hooks";
-export { transaction } from "./process";
 export { SourceNode, TransformNode } from "./nodes";
+export type { HookRenderer, Node } from "./nodes";
+export { transaction } from "./transaction";

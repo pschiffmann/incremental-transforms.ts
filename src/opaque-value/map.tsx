@@ -1,4 +1,4 @@
-import { HookRenderer } from "../nodes";
+import { HookRenderer } from "../core";
 import { ExtractContextValues, PatchObject } from "../utility-types";
 import type { OpaqueValuePatch } from "./base";
 import { OpaqueValue, OpaqueValueTransformBase } from "./base";

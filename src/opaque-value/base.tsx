@@ -1,8 +1,15 @@
-import { Node, TransformNode } from "../nodes";
+import { Node, TransformNode } from "../core";
 
 export type ExtractOpaqueValueType<T> = T extends OpaqueValue<infer R>
   ? R
   : never;
+
+/**
+ * Creates a type with the same keys as `C` except those listed in `R`.
+ */
+export declare type ExtractContextValues<C extends {}, R extends keyof any> = {
+  readonly [K in keyof Omit<C, R>]: ExtractOpaqueValueType<C[K]>;
+};
 
 export interface OpaqueValue<T> {
   get(): T;

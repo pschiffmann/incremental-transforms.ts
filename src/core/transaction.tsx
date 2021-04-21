@@ -1,7 +1,7 @@
 import FlatQueue from "flatqueue";
 import { createHookRenderer, HookProps, SetStateCallback } from "./hooks";
 import { getNodeExpando, Node, SourceNode, TransformNode } from "./nodes";
-import * as $Map from "./util/map";
+import * as $Map from "../util/map";
 
 export type ErrorHandler = (error: any) => void;
 
