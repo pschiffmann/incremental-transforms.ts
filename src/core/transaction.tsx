@@ -328,10 +328,10 @@ function render() {
     const expando = getNodeExpando(node);
 
     // Build patch object from dirty dependencies.
-    const deps: any = {};
+    const deps = new Map<string, any>();
     for (const [name, dep] of Object.entries<Node>(node.dependencies)) {
       const patch = patches.get(dep);
-      if (patch) deps[name] = patch;
+      if (patch) deps.set(name, patch);
     }
 
     // Render `node`.
@@ -391,6 +391,22 @@ function commit() {
       } else {
         hookState.delete(key);
       }
+    }
+  }
+  for (const node of process!.connected) {
+    getNodeExpando(node).consumers = new Set();
+  }
+  for (const node of process!.connected) {
+    for (const dependency of Object.values<any /* Node */>(node.dependencies)) {
+      getNodeExpando(dependency).consumers.add(node);
+    }
+  }
+  for (const node of process!.disconnected) {
+    getNodeExpando(node).consumers = null;
+  }
+  for (const node of process!.disconnected) {
+    for (const dependency of Object.values<any /* Node */>(node.dependencies)) {
+      getNodeExpando(node).consumers?.delete(node);
     }
   }
 }

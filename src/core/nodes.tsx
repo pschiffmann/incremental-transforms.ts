@@ -142,7 +142,7 @@ export abstract class TransformNode<
    *
    */
   abstract _initialize(
-    dependencies: PatchObject<D>,
+    dependencies: Map<string, unknown>,
     hookRenderer: HookRenderer<K>
   ): P;
 
@@ -156,7 +156,7 @@ export abstract class TransformNode<
    * all cleanup effects.
    */
   abstract _render(
-    dependencies: PatchObject<D>,
+    dependencies: Map<string, unknown>,
     dirtyKeys: Set<K>,
     hookRenderer: HookRenderer<K>
   ): P | null;

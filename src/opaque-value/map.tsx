@@ -30,13 +30,12 @@ export class MappedOpaqueValue<I, O> extends OpaqueValueTransformBase<
   #callback: MappedOpaqueValueCallback<I, O>;
 
   _initialize(
-    dependencies: PatchObject<MappedOpaqueValueDependencies<I>>,
+    dependencies: Map<string, OpaqueValuePatch<I>>,
     hookRenderer: HookRenderer<"self">
   ): OpaqueValuePatch<O> {
+    const patch = dependencies.get("self");
     const value = hookRenderer("self", () =>
-      this.#callback(
-        dependencies ? dependencies.self : this.dependencies.self.get()
-      )
+      this.#callback(patch ? patch.value : this.dependencies.self.get())
     );
     return { value };
   }
@@ -46,14 +45,13 @@ export class MappedOpaqueValue<I, O> extends OpaqueValueTransformBase<
    * all cleanup effects.
    */
   _render(
-    dependencies: PatchObject<MappedOpaqueValueDependencies<I>>,
+    dependencies: Map<string, OpaqueValuePatch<I>>,
     dirtyKeys: Set<"self">,
     hookRenderer: HookRenderer<"self">
   ): OpaqueValuePatch<O> | null {
+    const patch = dependencies.get("self");
     const value = hookRenderer("self", () =>
-      this.#callback(
-        dependencies ? dependencies.self : this.dependencies.self.get()
-      )
+      this.#callback(patch ? patch.value : this.dependencies.self.get())
     );
     return Object.is(this.get(), value) ? null : { value };
   }
