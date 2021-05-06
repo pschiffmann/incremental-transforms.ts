@@ -121,6 +121,17 @@ export function transaction<R>(
 
 export declare namespace transaction {
   const inProgress: boolean;
+
+  function on(
+    type: "commit",
+    callback: (e: {
+      readonly connected: Set<Node>;
+      readonly disconnected: Set<Node>;
+      readonly changed: Set<Node>;
+    }) => void
+  ): void;
+  function on(type: "abort", callback: (error: any) => void): void;
+  function on(type: "effect-error", callback: (error: any) => void): void;
 }
 
 Object.defineProperty(transaction, "inProgress", {

@@ -68,6 +68,11 @@ export abstract class NodeBase<P = unknown> {
    * apply `patch` to it.
    */
   abstract _commit(patch: P): void;
+
+  // on(type: "change", callback: () => void): void;
+  // on(type: "connect", callback: () => void): void;
+  // on(type: "disconnect", callback: () => void): void;
+  // on(type, callback): void {}
 }
 
 /**
