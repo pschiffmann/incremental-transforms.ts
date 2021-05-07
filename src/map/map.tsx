@@ -84,6 +84,7 @@ export class MappedIncrementalMap<
     const selfPatch = patches.get("self") as
       | IncrementalMapPatch<K, IV>
       | undefined;
+
     if (selfPatch) {
       for (const [k, v] of selfPatch.updated) {
         const value = hookRenderer(k, () => this.#callback(v, ctx));
@@ -96,7 +97,12 @@ export class MappedIncrementalMap<
         patch.deleted.add(k);
       }
     }
-    for (const k of dirtyKeys) {
+
+    // If a context value changed, all keys must be re-rendered
+    const contextChanged = patches.has("self")
+      ? patches.size > 1
+      : patches.size > 0;
+    for (const k of contextChanged ? this.keys() : dirtyKeys) {
       if (selfPatch && (selfPatch.updated.has(k) || selfPatch.deleted.has(k))) {
         continue;
       }

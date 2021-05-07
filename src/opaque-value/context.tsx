@@ -1,4 +1,4 @@
-import type { OpaqueValue } from "./base";
+import type { OpaqueValue, OpaqueValuePatch } from "./base";
 
 export interface Context {
   readonly [K: string]: OpaqueValue<any>;
@@ -14,7 +14,9 @@ export function buildContext<C extends Context>(
 ): UnpackContext<C> {
   const result: any = {};
   for (const [k, v] of Object.entries(dependencies)) {
-    result[k] = patches.has(k) ? patches.get(k) : v.get();
+    result[k] = patches.has(k)
+      ? (patches.get(k) as OpaqueValuePatch<unknown>).value
+      : v.get();
   }
   return result;
 }
