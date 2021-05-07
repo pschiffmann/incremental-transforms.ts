@@ -5,10 +5,10 @@ export { transaction } from "./transaction";
 
 /**
  * Connects `node` and returns a disconnect callback.
- * 
+ *
  * Throws an error if `node` is already connected, or if any dependency is not
  * connected.
- * 
+ *
  * Connecting and disconnecting are executed in a transaction. If `connect()` is
  * called inside a `transaction()` and throws an error, the whole transaction is
  * aborted. Likewise, if either `connect()` or the disconnect callback are

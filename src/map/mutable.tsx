@@ -1,10 +1,6 @@
 import { SourceNode } from "../core";
-import {
-  createPatch,
-  IncrementalMap,
-  IncrementalMapPatch,
-  simplifyPatch,
-} from "./base";
+import type { IncrementalMap, IncrementalMapPatch } from "./base";
+import { createPatch, simplifyPatch } from "./base";
 
 export function mutable<K, V>(
   entries?: Iterable<[K, V]>
@@ -26,6 +22,10 @@ export class MutableIncrementalMap<K, V>
 
   #entries = new Map<K, V>();
 
+  get size() {
+    return this.#entries.size;
+  }
+
   has(key: K): boolean {
     return this.#entries.has(key);
   }
@@ -46,10 +46,16 @@ export class MutableIncrementalMap<K, V>
     return this.#entries.values();
   }
 
+  [Symbol.iterator]() {
+    return this.#entries.entries();
+  }
+
   set(key: K, value: V): void {
     this._setState((patch) => {
       patch ??= createPatch();
-      patch.updated.set(key, value);
+      Object.is(this.get(key), value)
+        ? patch.updated.delete(key)
+        : patch.updated.set(key, value);
       patch.deleted.delete(key);
       return simplifyPatch(patch);
     });

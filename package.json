@@ -5,7 +5,7 @@
   "type": "module",
   "license": "UNLICENSED",
   "exports": {
-    "./core": "./dist/core/index.js",
+    ".": "./dist/core/index.js",
     "./map": "./dist/map/index.js",
     "./opaque-value": "./dist/opaque-value/index.js"
   },

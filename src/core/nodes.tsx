@@ -147,9 +147,9 @@ export abstract class TransformNode<
    *
    */
   abstract _initialize(
-    dependencies: Map<string, unknown>,
+    patches: Map<string, unknown>,
     hookRenderer: HookRenderer<K>
-  ): P;
+  ): P | null;
 
   /**
    * Called during the `commit` phase after this node has been disconnected.
@@ -161,7 +161,7 @@ export abstract class TransformNode<
    * all cleanup effects.
    */
   abstract _render(
-    dependencies: Map<string, unknown>,
+    patches: Map<string, unknown>,
     dirtyKeys: Set<K>,
     hookRenderer: HookRenderer<K>
   ): P | null;
