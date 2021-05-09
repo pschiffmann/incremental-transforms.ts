@@ -8,34 +8,36 @@ import {
   simplifyPatch,
 } from "./base";
 
-type MappedIncrementalMapCallback<IV, OV, C extends Context> = (
-  value: IV,
+// Should the callback signature be `(key, value, ctx) => boolean`?
+// Or maybe implement `filterEntries()`, `mapEntries()` that use both key and
+// value?
+type FilteredIncrementalMapCallback<V, C extends Context> = (
+  value: V,
   context: UnpackContext<C>
-) => OV;
+) => boolean;
 
-type Dependencies<K, IV, C extends Context> = Omit<C, "self"> & {
-  readonly self: IncrementalMap<K, IV>;
+type Dependencies<K, V, C extends Context> = Omit<C, "self"> & {
+  readonly self: IncrementalMap<K, V>;
 };
 
-export function map<K, IV, OV, C extends Context>(
-  self: IncrementalMap<K, IV>,
-  callback: MappedIncrementalMapCallback<IV, OV, C>,
+export function filter<K, V, C extends Context>(
+  self: IncrementalMap<K, V>,
+  callback: FilteredIncrementalMapCallback<V, C>,
   context?: C
-): MappedIncrementalMap<K, IV, OV, C> {
-  const result = new MappedIncrementalMap(self, callback, context);
+): FilteredIncrementalMap<K, V, C> {
+  const result = new FilteredIncrementalMap(self, callback, context);
   result.connect();
   return result;
 }
 
-export class MappedIncrementalMap<
+export class FilteredIncrementalMap<
   K,
-  IV,
-  OV,
+  V,
   C extends Context
-> extends IncrementalMapBase<K, OV, Dependencies<K, IV, C>> {
+> extends IncrementalMapBase<K, V, Dependencies<K, V, C>> {
   constructor(
-    self: IncrementalMap<K, IV>,
-    callback: MappedIncrementalMapCallback<IV, OV, C>,
+    self: IncrementalMap<K, V>,
+    callback: FilteredIncrementalMapCallback<V, C>,
     context?: C
   ) {
     super({ ...context, self } as any);
@@ -45,30 +47,31 @@ export class MappedIncrementalMap<
     this.#callback = callback;
   }
 
-  #callback: MappedIncrementalMapCallback<IV, OV, C>;
+  #callback: FilteredIncrementalMapCallback<V, C>;
 
   _initialize(
     patches: Map<string, unknown>,
     hookRenderer: HookRenderer<K>
-  ): IncrementalMapPatch<K, OV> | null {
-    const patch = createPatch<K, OV>();
+  ): IncrementalMapPatch<K, V> | null {
+    const patch = createPatch<K, V>();
     const { self, ...context } = this.dependencies;
     const ctx = buildContext((context as unknown) as C, patches);
     const selfPatch = patches.get("self") as
-      | IncrementalMapPatch<K, IV>
+      | IncrementalMapPatch<K, V>
       | undefined;
+
     if (selfPatch) {
       for (const [k, v] of selfPatch.updated) {
-        const value = hookRenderer(k, () => this.#callback(v, ctx));
-        patch.updated.set(k, value);
+        const result = hookRenderer(k, () => this.#callback(v, ctx));
+        if (result) patch.updated.set(k, v);
       }
     }
     for (const [k, v] of self) {
       if (selfPatch && (selfPatch.updated.has(k) || selfPatch.deleted.has(k))) {
         continue;
       }
-      const value = hookRenderer(k, () => this.#callback(v, ctx));
-      patch.updated.set(k, value);
+      const result = hookRenderer(k, () => this.#callback(v, ctx));
+      if (result) patch.updated.set(k, v);
     }
     return simplifyPatch(patch);
   }
@@ -77,19 +80,19 @@ export class MappedIncrementalMap<
     patches: Map<string, unknown>,
     dirtyKeys: Set<K>,
     hookRenderer: HookRenderer<K>
-  ): IncrementalMapPatch<K, OV> | null {
-    const patch = createPatch<K, OV>();
+  ): IncrementalMapPatch<K, V> | null {
+    const patch = createPatch<K, V>();
     const { self, ...context } = this.dependencies;
     const ctx = buildContext((context as unknown) as C, patches);
     const selfPatch = patches.get("self") as
-      | IncrementalMapPatch<K, IV>
+      | IncrementalMapPatch<K, V>
       | undefined;
 
     if (selfPatch) {
       for (const [k, v] of selfPatch.updated) {
-        const value = hookRenderer(k, () => this.#callback(v, ctx));
-        if (!this.has(k) || !Object.is(value, this.get(k))) {
-          patch.updated.set(k, value);
+        const result = hookRenderer(k, () => this.#callback(v, ctx));
+        if (result !== this.has(k)) {
+          result ? patch.updated.set(k, v) : patch.deleted.add(k);
         }
       }
       for (const k of selfPatch.deleted) {
@@ -106,9 +109,9 @@ export class MappedIncrementalMap<
       if (selfPatch && (selfPatch.updated.has(k) || selfPatch.deleted.has(k))) {
         continue;
       }
-      const value = hookRenderer(k, () => this.#callback(self.get(k)!, ctx));
-      if (!Object.is(value, this.get(k))) {
-        patch.updated.set(k, value);
+      const result = hookRenderer(k, () => this.#callback(self.get(k)!, ctx));
+      if (result !== this.has(k)) {
+        result ? patch.updated.set(k, self.get(k)!) : patch.deleted.add(k);
       }
     }
     return simplifyPatch(patch);
