@@ -14,6 +14,15 @@ export function putIfAbsent<K, V>(
 }
 
 /**
+ * Copies all entries from `other` to `self`.
+ */
+export function assign<K, V>(self: Map<K, V>, other: Map<K, V>): void {
+  for (const [k, v] of other) {
+    self.set(k, v);
+  }
+}
+
+/**
  * Returns `self.get(key1).get(key2).get(key3)`, or `fallback` if any key
  * doesn't exist.
  */

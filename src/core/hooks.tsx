@@ -1,3 +1,4 @@
+import * as $Map from "../util/map";
 import { HookRenderer, TransformNode } from "./nodes";
 import { mutateTransformNode } from "./transaction";
 
@@ -46,7 +47,7 @@ export type HookStateMap = Map<any, Map<number, any>>;
 export type HookPropsPatch = Map<any, HookProps[] | null>;
 export type HookStatePatch = Map<any, Map<number, any>>;
 
-let hookContext: HookContext | null = null;
+let hookContext: MountContext | UpdateContext | null = null;
 
 /**
  * Returns a (hookRenderer, nextHookProps, effectCleanups, effects) tuple.
@@ -56,7 +57,7 @@ export function createHookRenderer(
   node: TransformNode,
   oldHookProps: HookPropsMap,
   oldHookState: HookStateMap,
-  newHookState: HookStatePatch | null
+  newHookState: HookStatePatch
 ): {
   hookRenderer: HookRenderer;
   newHookProps: HookPropsPatch;
@@ -76,15 +77,14 @@ export function createHookRenderer(
       return undefined as any;
     }
 
-    if (oldHookProps.has(key)) {
-      hookContext = new UpdateContext(oldHookProps.get(key)!, (stateIndex) =>
-        newHookState?.has(stateIndex)
-          ? newHookState.get(stateIndex)!
-          : oldHookState.get(stateIndex)!
-      );
-    } else {
-      hookContext = new MountContext(node, key);
-    }
+    const newKeyState = $Map.putIfAbsent(newHookState, key, () => new Map());
+    hookContext = !oldHookProps.has(key)
+      ? new MountContext(node, key, newKeyState)
+      : new UpdateContext(
+          oldHookProps.get(key)!,
+          oldHookState.get(key)!,
+          newKeyState
+        );
     try {
       const result = callback();
       newHookProps.set(key, hookContext.newHookProps);
@@ -110,7 +110,23 @@ export function createHookRenderer(
  *
  */
 abstract class HookContext {
+  constructor(newHookState: Map<number, any>) {
+    this.newHookState = newHookState;
+  }
+
   readonly newHookProps: HookProps[] = [];
+
+  /**
+   * Used differently by `MountContext` and `UpdateContext`.
+   *
+   * - `MountContext`: This map is initially empty and `setState()` calls add
+   *   entries.
+   * - `UpdateContext`: Contains new state values that have been updated by a
+   *   `setState()` callback in this transaction. The `setState()` state return
+   *   value will be taken from this map if it exists, or from `oldHookState`
+   *   otherwise.
+   */
+  readonly newHookState: Map<number, any>;
   readonly effects: (() => void)[] = [];
 
   #executing: "memo" | "state" | null = null;
@@ -165,15 +181,14 @@ abstract class HookContext {
  *
  */
 class MountContext extends HookContext {
-  constructor(node: TransformNode, key: any) {
-    super();
+  constructor(node: TransformNode, key: any, newHookState: Map<number, any>) {
+    super(newHookState);
     this.node = node;
     this.key = key;
   }
 
   readonly node: TransformNode;
   readonly key: any;
-  readonly newHookState = new Map<number, any>();
 
   useRef<T>(initialValue: T): RefObject<T> {
     const ref: RefObject<T> = { current: initialValue };
@@ -203,20 +218,17 @@ class MountContext extends HookContext {
 class UpdateContext extends HookContext {
   constructor(
     oldHookProps: HookProps[],
-    getHookState: (stateIndex: number) => any
+    oldHookState: Map<number, any>,
+    newHookState: Map<number, any>
   ) {
-    super();
+    super(newHookState);
     this.oldHookProps = oldHookProps;
-    this.getHookState = getHookState;
+    this.oldHookState = oldHookState;
   }
 
   readonly oldHookProps: HookProps[];
+  readonly oldHookState: Map<number, any>;
   readonly effectCleanups: (() => void)[] = [];
-
-  /**
-   * Returns the value of the nth `useState()` hook.
-   */
-  readonly getHookState: (stateIndex: number) => any;
 
   getOldHookProps(type: "memo"): MemoHookProps;
   getOldHookProps(type: "effect"): EffectHookProps;
@@ -258,9 +270,11 @@ class UpdateContext extends HookContext {
 
   useState<T>(): [T, SetStateCallback<T>] {
     const hookIndex = this.newHookProps.length;
-    const state = this.getHookState(hookIndex);
     const props = this.getOldHookProps("state");
     this.newHookProps.push(props);
+    const state = this.newHookState.has(hookIndex)
+      ? this.newHookState.get(hookIndex)!
+      : this.oldHookState.get(hookIndex)!;
     return [state, props.setState];
   }
 }

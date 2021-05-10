@@ -82,6 +82,8 @@ interface Process {
 
 let process: Process | null = null;
 
+const onCommit = new Set<() => void>();
+
 export function transaction<R>(
   callback: () => R,
   onError: ErrorHandler = console.error
@@ -106,6 +108,7 @@ export function transaction<R>(
     if (
       process.patches.size !== 0 ||
       process.hookProps.size !== 0 ||
+      process.hookState.size !== 0 ||
       process.connected.size !== 0 ||
       process.disconnected.size !== 0
     ) {
@@ -134,11 +137,31 @@ export declare namespace transaction {
   function on(type: "effect-error", callback: (error: any) => void): void;
 }
 
-Object.defineProperty(transaction, "inProgress", {
-  get() {
-    return !!process;
+Object.defineProperties(transaction, {
+  inProgress: {
+    get() {
+      return !!process;
+    },
+  },
+  on: {
+    get() {
+      return on;
+    },
   },
 });
+
+function on(
+  event: "commit" | "abort" | "effecterror",
+  callback: () => void
+): void {
+  switch (event) {
+    case "commit":
+      onCommit.add(callback);
+      break;
+    default:
+      throw new Error("Unimplemented");
+  }
+}
 
 /**
  *
@@ -345,6 +368,7 @@ function render() {
       if (patch) deps.set(name, patch);
     }
 
+    const hookStatePatch = $Map.putIfAbsent(hookState, node, () => new Map());
     // Render `node`.
     const {
       hookRenderer,
@@ -355,11 +379,11 @@ function render() {
       node,
       expando.hookProps,
       expando.hookState,
-      hookState.get(node) ?? null
+      hookStatePatch
     );
     const patch = connected.has(node)
       ? node._initialize(deps, hookRenderer)
-      : node._render(deps, new Set(hookState.get(node)?.keys()), hookRenderer);
+      : node._render(deps, new Set(hookStatePatch.keys()), hookRenderer);
     if (patch) {
       patches.set(node, patch);
       // `consumers` is `null` if `node` is in `connected`.
@@ -382,26 +406,21 @@ function commit() {
     node._commit(patch);
   }
   for (const [node, propsPatch] of process!.hookProps) {
-    const { hookProps } = getNodeExpando(node);
+    const { hookProps, hookState } = getNodeExpando(node);
     for (const [key, props] of propsPatch) {
       if (props) {
         hookProps.set(key, props);
       } else {
         hookProps.delete(key);
+        hookState.delete(key);
       }
     }
   }
   for (const [node, statePatch] of process!.hookState) {
     const { hookState } = getNodeExpando(node);
     for (const [key, patch] of statePatch) {
-      if (patch) {
-        const keyState = hookState.get(key)!;
-        for (const [index, state] of patch) {
-          keyState.set(index, state);
-        }
-      } else {
-        hookState.delete(key);
-      }
+      const keyState = hookState.get(key);
+      keyState ? $Map.assign(keyState, patch) : hookState.set(key, patch);
     }
   }
   for (const node of process!.connected) {
@@ -437,6 +456,13 @@ function effect() {
       callback();
     } catch (e) {
       onError(e);
+    }
+  }
+  for (const callback of onCommit) {
+    try {
+      callback();
+    } catch (e) {
+      console.error("Error in transaction.oncommit callback", e);
     }
   }
 }
