@@ -23,7 +23,7 @@ export function createPatch<K, V>(): IncrementalMapPatch<K, V> {
 export function simplifyPatch<K, V>(
   patch: IncrementalMapPatch<K, V>
 ): IncrementalMapPatch<K, V> | null {
-  return patch.updated.size !== 0 || patch.updated.size !== 0 ? patch : null;
+  return patch.updated.size !== 0 || patch.deleted.size !== 0 ? patch : null;
 }
 
 export abstract class IncrementalMapBase<K, V, D>

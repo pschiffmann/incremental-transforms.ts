@@ -91,9 +91,7 @@ export class FilteredIncrementalMap<
     if (selfPatch) {
       for (const [k, v] of selfPatch.updated) {
         const result = hookRenderer(k, () => this.#callback(v, ctx));
-        if (result !== this.has(k)) {
-          result ? patch.updated.set(k, v) : patch.deleted.add(k);
-        }
+        result ? patch.updated.set(k, v) : patch.deleted.add(k);
       }
       for (const k of selfPatch.deleted) {
         hookRenderer(k);
@@ -105,7 +103,7 @@ export class FilteredIncrementalMap<
     const contextChanged = patches.has("self")
       ? patches.size > 1
       : patches.size > 0;
-    for (const k of contextChanged ? this.keys() : dirtyKeys) {
+    for (const k of contextChanged ? self.keys() : dirtyKeys) {
       if (selfPatch && (selfPatch.updated.has(k) || selfPatch.deleted.has(k))) {
         continue;
       }
