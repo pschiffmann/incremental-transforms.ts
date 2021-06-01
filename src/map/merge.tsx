@@ -1,4 +1,4 @@
-import { Context, OpaqueValue, UnpackContext } from "../opaque-value";
+import { Context, UnpackContext } from "../value";
 import { IncrementalMap } from "./base";
 
 interface Inputs {
@@ -47,8 +47,8 @@ export function merge<I extends Inputs, OK, OV, C extends Context>(
 //   ({ a, b }, { x, y }) => `${a}${b}${x}${y}`,
 //   {
 //     context: (null as any) as {
-//       x: OpaqueValue<boolean>;
-//       y: OpaqueValue<symbol>;
+//       x: IncrementalValue<boolean>;
+//       y: IncrementalValue<symbol>;
 //     },
 //     mapKey: {
 //       a(k) {

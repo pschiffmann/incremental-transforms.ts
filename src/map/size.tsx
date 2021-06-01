@@ -1,5 +1,5 @@
-import { OpaqueValueTransformBase } from "../opaque-value";
-import { OpaqueValuePatch } from "../opaque-value/base";
+import type { IncrementalValuePatch } from "../value";
+import { IncrementalValueTransformBase } from "../value";
 import type { IncrementalMap, IncrementalMapPatch } from "./base";
 
 interface Dependencies {
@@ -14,7 +14,7 @@ export function size(
   return result;
 }
 
-export class IncrementalMapSize extends OpaqueValueTransformBase<
+export class IncrementalMapSize extends IncrementalValueTransformBase<
   number,
   Dependencies
 > {
@@ -22,7 +22,7 @@ export class IncrementalMapSize extends OpaqueValueTransformBase<
     super({ self });
   }
 
-  _initialize(patches: Map<string, unknown>): OpaqueValuePatch<number> {
+  _initialize(patches: Map<string, unknown>): IncrementalValuePatch<number> {
     const { self } = this.dependencies;
     const selfPatch = patches.get("self") as
       | IncrementalMapPatch<unknown, unknown>
@@ -37,8 +37,8 @@ export class IncrementalMapSize extends OpaqueValueTransformBase<
     return { value };
   }
 
-  _render(patches: Map<string, unknown>): OpaqueValuePatch<number> | null {
+  _render(patches: Map<string, unknown>): IncrementalValuePatch<number> | null {
     const patch = this._initialize(patches);
-    return patch.value !== this.get() ? patch : null;
+    return patch.value !== this.current ? patch : null;
   }
 }

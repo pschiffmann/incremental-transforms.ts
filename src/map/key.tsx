@@ -1,5 +1,5 @@
-import { OpaqueValueTransformBase } from "../opaque-value";
-import { OpaqueValuePatch } from "../opaque-value/base";
+import { IncrementalValueTransformBase } from "../value";
+import type { IncrementalValuePatch } from "../value";
 import type { IncrementalMap, IncrementalMapPatch } from "./base";
 
 interface Dependencies<K, V> {
@@ -16,7 +16,7 @@ export function key<K, V, F>(
   return result;
 }
 
-export class IncrementalMapKey<K, V, F> extends OpaqueValueTransformBase<
+export class IncrementalMapKey<K, V, F> extends IncrementalValueTransformBase<
   V | F,
   Dependencies<K, V>
 > {
@@ -29,7 +29,7 @@ export class IncrementalMapKey<K, V, F> extends OpaqueValueTransformBase<
   #key: K;
   #fallback: F;
 
-  _initialize(patches: Map<string, unknown>): OpaqueValuePatch<V | F> {
+  _initialize(patches: Map<string, unknown>): IncrementalValuePatch<V | F> {
     const { self } = this.dependencies;
     const selfPatch = patches.get("self") as
       | IncrementalMapPatch<K, V>
@@ -44,7 +44,7 @@ export class IncrementalMapKey<K, V, F> extends OpaqueValueTransformBase<
     return { value };
   }
 
-  _render(patches: Map<string, unknown>): OpaqueValuePatch<V | F> | null {
+  _render(patches: Map<string, unknown>): IncrementalValuePatch<V | F> | null {
     const selfPatch = patches.get("self") as IncrementalMapPatch<K, V>;
     if (selfPatch.updated.has(this.#key)) {
       return { value: selfPatch.updated.get(this.#key)! };

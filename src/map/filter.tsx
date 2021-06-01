@@ -1,5 +1,5 @@
 import type { HookRenderer } from "../core";
-import { buildContext, Context, UnpackContext } from "../opaque-value";
+import { buildContext, Context, UnpackContext } from "../value";
 import {
   createPatch,
   IncrementalMap,
