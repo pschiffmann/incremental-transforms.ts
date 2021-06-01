@@ -1,6 +1,7 @@
+import type { Node } from "../core";
 import { TransformNode } from "../core";
 
-export interface IncrementalValue<T> {
+export interface IncrementalValue<T> extends Node {
   readonly current: T;
 }
 

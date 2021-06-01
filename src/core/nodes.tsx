@@ -1,8 +1,6 @@
 import { HookPropsMap, HookStateMap } from "./hooks";
 import { connect, disconnect, mutateSourceNode } from "./transaction";
 
-export type Node = SourceNode | TransformNode;
-
 export type HookRenderer<K = unknown> = <R>(key: K, callback?: () => R) => R;
 
 export interface SourceNodeExpando {
@@ -37,7 +35,7 @@ let nextNodeId = 0;
 /**
  *
  */
-export abstract class NodeBase<P = unknown> {
+export abstract class Node<P = unknown> {
   constructor() {
     const id = nextNodeId++;
     if (this instanceof TransformNode) {
@@ -79,7 +77,7 @@ export abstract class NodeBase<P = unknown> {
  * A source node has setter methods that can be used to mutate the object
  * directly. It has no dependencies.
  */
-export abstract class SourceNode<P = unknown> extends NodeBase<P> {
+export abstract class SourceNode<P = unknown> extends Node<P> {
   /**
    * Inspired by: https://api.flutter.dev/flutter/widgets/State/setState.html
    *
@@ -101,7 +99,7 @@ export abstract class TransformNode<
   D extends {} = {},
   P = unknown,
   K = unknown
-> extends NodeBase<P> {
+> extends Node<P> {
   constructor(dependencies: D) {
     super();
     this.#dependencies = Object.freeze(dependencies);

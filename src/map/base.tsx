@@ -1,6 +1,7 @@
+import type { Node } from "../core";
 import { TransformNode } from "../core";
 
-export interface IncrementalMap<K, V> {
+export interface IncrementalMap<K, V> extends Node {
   has(key: K): boolean;
   get(key: K): V | undefined;
   readonly size: number;
