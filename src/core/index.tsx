@@ -2,6 +2,7 @@ export { useEffect, useMemo, useRef, useState } from "./hooks";
 export { SourceNode, TransformNode } from "./nodes";
 export type { HookRenderer, Node, PatchObject } from "./nodes";
 export { transaction } from "./transaction";
+export type { OnCommitCallback } from "./transaction";
 
 /**
  * Connects `node` and returns a disconnect callback.

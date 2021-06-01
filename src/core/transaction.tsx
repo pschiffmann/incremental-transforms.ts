@@ -5,6 +5,12 @@ import * as $Map from "../util/map";
 
 export type ErrorHandler = (error: any) => void;
 
+export type OnCommitCallback = (e: {
+  readonly connected: Set<TransformNode>;
+  readonly disconnected: Set<TransformNode>;
+  readonly changed: Set<Node>;
+}) => void;
+
 interface Process {
   /**
    * A transaction goes through the phases in order mutate -> render -> commit
@@ -82,7 +88,7 @@ interface Process {
 
 let process: Process | null = null;
 
-const onCommit = new Set<() => void>();
+const onCommit = new Set<OnCommitCallback>();
 
 export function transaction<R>(
   callback: () => R,
@@ -125,16 +131,13 @@ export function transaction<R>(
 export declare namespace transaction {
   const inProgress: boolean;
 
-  function on(
-    type: "commit",
-    callback: (e: {
-      readonly connected: Set<Node>;
-      readonly disconnected: Set<Node>;
-      readonly changed: Set<Node>;
-    }) => void
-  ): void;
+  function on(type: "commit", callback: OnCommitCallback): void;
   function on(type: "abort", callback: (error: any) => void): void;
   function on(type: "effect-error", callback: (error: any) => void): void;
+
+  function off(type: "commit", callback: OnCommitCallback): void;
+  function off(type: "abort", callback: (error: any) => void): void;
+  function off(type: "effect-error", callback: (error: any) => void): void;
 }
 
 Object.defineProperties(transaction, {
@@ -148,6 +151,11 @@ Object.defineProperties(transaction, {
       return on;
     },
   },
+  off: {
+    get() {
+      return off;
+    },
+  },
 });
 
 function on(
@@ -157,6 +165,19 @@ function on(
   switch (event) {
     case "commit":
       onCommit.add(callback);
+      break;
+    default:
+      throw new Error("Unimplemented");
+  }
+}
+
+function off(
+  event: "commit" | "abort" | "effecterror",
+  callback: () => void
+): void {
+  switch (event) {
+    case "commit":
+      onCommit.delete(callback);
       break;
     default:
       throw new Error("Unimplemented");
@@ -458,9 +479,15 @@ function effect() {
       onError(e);
     }
   }
+
+  const onCommitInfo = {
+    connected: process!.connected,
+    disconnected: process!.disconnected,
+    changed: new Set(process!.patches.keys()),
+  };
   for (const callback of onCommit) {
     try {
-      callback();
+      callback(onCommitInfo);
     } catch (e) {
       console.error("Error in transaction.oncommit callback", e);
     }

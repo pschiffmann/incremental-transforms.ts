@@ -1,3 +1,5 @@
+export { IncrementalMapBase } from "./base";
+export type { IncrementalMap, IncrementalMapPatch } from "./base";
 export { filter, FilteredIncrementalMap } from "./filter";
 export { IncrementalMapKey, key } from "./key";
 export { map, MappedIncrementalMap } from "./map";
