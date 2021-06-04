@@ -10,9 +10,9 @@
     "./opaque-value": "./dist/opaque-value/index.js"
   },
   "scripts": {
-    "dev": "npm-run-all -p watch:*",
-    "watch:babel": "babel src --out-dir dist --extensions .tsx --watch",
-    "watch:tsc": "tsc --watch",
+    "start": "npm-run-all -p start:*",
+    "start:babel": "babel src --out-dir dist --extensions .tsx --watch",
+    "start:tsc": "tsc --watch",
     "format": "prettier --write ."
   },
   "dependencies": {
