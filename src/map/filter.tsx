@@ -2,6 +2,7 @@ import type { HookRenderer } from "../core";
 import { buildContext, Context, UnpackContext } from "../value";
 import {
   createPatch,
+  getDirtyEntries,
   IncrementalMap,
   IncrementalMapBase,
   IncrementalMapPatch,
@@ -60,19 +61,11 @@ export class FilteredIncrementalMap<
       | IncrementalMapPatch<K, V>
       | undefined;
 
-    if (selfPatch) {
-      for (const [k, v] of selfPatch.updated) {
-        const result = hookRenderer(k, () => this.#callback(v, ctx));
-        if (result) patch.updated.set(k, v);
-      }
-    }
-    for (const [k, v] of self) {
-      if (selfPatch && (selfPatch.updated.has(k) || selfPatch.deleted.has(k))) {
-        continue;
-      }
+    for (const [k, v] of getDirtyEntries(self, selfPatch, self.keys())) {
       const result = hookRenderer(k, () => this.#callback(v, ctx));
       if (result) patch.updated.set(k, v);
     }
+
     return simplifyPatch(patch);
   }
 
@@ -88,30 +81,24 @@ export class FilteredIncrementalMap<
       | IncrementalMapPatch<K, V>
       | undefined;
 
-    if (selfPatch) {
-      for (const [k, v] of selfPatch.updated) {
-        const result = hookRenderer(k, () => this.#callback(v, ctx));
+    const contextChanged = patches.size !== Number(patches.has("self"));
+    for (const [k, v] of getDirtyEntries(
+      self,
+      selfPatch,
+      contextChanged ? self.keys() : dirtyKeys
+    )) {
+      const result = hookRenderer(k, () => this.#callback(v, ctx));
+      if (result !== this.has(k)) {
         result ? patch.updated.set(k, v) : patch.deleted.add(k);
       }
+    }
+    if (selfPatch) {
       for (const k of selfPatch.deleted) {
         hookRenderer(k);
         patch.deleted.add(k);
       }
     }
 
-    // If a context value changed, all keys must be re-rendered
-    const contextChanged = patches.has("self")
-      ? patches.size > 1
-      : patches.size > 0;
-    for (const k of contextChanged ? self.keys() : dirtyKeys) {
-      if (selfPatch && (selfPatch.updated.has(k) || selfPatch.deleted.has(k))) {
-        continue;
-      }
-      const result = hookRenderer(k, () => this.#callback(self.get(k)!, ctx));
-      if (result !== this.has(k)) {
-        result ? patch.updated.set(k, self.get(k)!) : patch.deleted.add(k);
-      }
-    }
     return simplifyPatch(patch);
   }
 }

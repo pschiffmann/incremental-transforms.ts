@@ -2,6 +2,7 @@ import type { HookRenderer } from "../core";
 import { buildContext, Context, UnpackContext } from "../value";
 import {
   createPatch,
+  getDirtyEntries,
   IncrementalMap,
   IncrementalMapBase,
   IncrementalMapPatch,
@@ -57,19 +58,12 @@ export class MappedIncrementalMap<
     const selfPatch = patches.get("self") as
       | IncrementalMapPatch<K, IV>
       | undefined;
-    if (selfPatch) {
-      for (const [k, v] of selfPatch.updated) {
-        const value = hookRenderer(k, () => this.#callback(v, ctx));
-        patch.updated.set(k, value);
-      }
-    }
-    for (const [k, v] of self) {
-      if (selfPatch && (selfPatch.updated.has(k) || selfPatch.deleted.has(k))) {
-        continue;
-      }
+
+    for (const [k, v] of getDirtyEntries(self, selfPatch, self.keys())) {
       const value = hookRenderer(k, () => this.#callback(v, ctx));
       patch.updated.set(k, value);
     }
+
     return simplifyPatch(patch);
   }
 
@@ -85,32 +79,24 @@ export class MappedIncrementalMap<
       | IncrementalMapPatch<K, IV>
       | undefined;
 
-    if (selfPatch) {
-      for (const [k, v] of selfPatch.updated) {
-        const value = hookRenderer(k, () => this.#callback(v, ctx));
-        if (!this.has(k) || !Object.is(value, this.get(k))) {
-          patch.updated.set(k, value);
-        }
+    const contextChanged = patches.size !== Number(patches.has("self"));
+    for (const [k, v] of getDirtyEntries(
+      self,
+      selfPatch,
+      contextChanged ? self.keys() : dirtyKeys
+    )) {
+      const value = hookRenderer(k, () => this.#callback(v, ctx));
+      if (!this.has(k) || !Object.is(value, this.get(k))) {
+        patch.updated.set(k, value);
       }
+    }
+    if (selfPatch) {
       for (const k of selfPatch.deleted) {
         hookRenderer(k);
         patch.deleted.add(k);
       }
     }
 
-    // If a context value changed, all keys must be re-rendered
-    const contextChanged = patches.has("self")
-      ? patches.size > 1
-      : patches.size > 0;
-    for (const k of contextChanged ? this.keys() : dirtyKeys) {
-      if (selfPatch && (selfPatch.updated.has(k) || selfPatch.deleted.has(k))) {
-        continue;
-      }
-      const value = hookRenderer(k, () => this.#callback(self.get(k)!, ctx));
-      if (!Object.is(value, this.get(k))) {
-        patch.updated.set(k, value);
-      }
-    }
     return simplifyPatch(patch);
   }
 }

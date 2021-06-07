@@ -27,8 +27,41 @@ export function simplifyPatch<K, V>(
   return patch.updated.size !== 0 || patch.deleted.size !== 0 ? patch : null;
 }
 
-export abstract class IncrementalMapBase<K, V, D>
-  extends TransformNode<D, IncrementalMapPatch<K, V>, K>
+/**
+ * Helper function that can be used when implementing `_initialize()` and
+ * `_render()` in classes that transform a single IncrementalMap as input.
+ *
+ * Yields entries for all keys in `patch.updated` and `dirtyKeys` except for
+ * those in `patch.deleted`. Values from `patch.updated` are prioritized over
+ * values from `input`.
+ *
+ * `dirtyKeys()` is a list of keys from `input` that should be re-rendered.
+ * `_initialize()` should pass `input.keys()` because all keys need to be
+ * rendered. `_render()` should pass its own `dirtyKeys` argument, or
+ * `input.keys()` if a context value changed.
+ *
+ * Notice: This function doesn't yield `patch.deleted` keys. `_render()`
+ * implementations must read deleted keys from the patch directly.
+ */
+export function* getDirtyEntries<K, V, HK>(
+  input: IncrementalMap<K, V>,
+  patch: IncrementalMapPatch<K, V> | undefined,
+  dirtyKeys: Iterable<K>
+): Iterable<[K, V]> {
+  if (patch) {
+    for (const entry of patch.updated) {
+      yield entry;
+    }
+  }
+  for (const k of dirtyKeys) {
+    if (!patch || (!patch.updated.has(k) && !patch.deleted.has(k))) {
+      yield [k, input.get(k)!];
+    }
+  }
+}
+
+export abstract class IncrementalMapBase<K, V, D, HK = K>
+  extends TransformNode<D, IncrementalMapPatch<K, V>, HK>
   implements IncrementalMap<K, V> {
   #entries = new Map<K, V>();
 
