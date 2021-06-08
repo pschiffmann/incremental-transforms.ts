@@ -1,5 +1,5 @@
-import { IncrementalValueTransformBase } from "../value";
 import type { IncrementalValuePatch } from "../value";
+import { IncrementalValueBase } from "../value";
 import type { IncrementalMap, IncrementalMapPatch } from "./base";
 
 interface Dependencies<K, V> {
@@ -16,7 +16,7 @@ export function key<K, V, F>(
   return result;
 }
 
-export class IncrementalMapKey<K, V, F> extends IncrementalValueTransformBase<
+export class IncrementalMapKey<K, V, F> extends IncrementalValueBase<
   V | F,
   Dependencies<K, V>
 > {

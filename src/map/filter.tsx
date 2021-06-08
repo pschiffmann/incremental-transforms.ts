@@ -9,10 +9,8 @@ import {
   simplifyPatch,
 } from "./base";
 
-// Should the callback signature be `(key, value, ctx) => boolean`?
-// Or maybe implement `filterEntries()`, `mapEntries()` that use both key and
-// value?
-type FilteredIncrementalMapCallback<V, C extends Context> = (
+type FilteredIncrementalMapCallback<K, V, C extends Context> = (
+  key: K,
   value: V,
   context: UnpackContext<C>
 ) => boolean;
@@ -23,7 +21,7 @@ type Dependencies<K, V, C extends Context> = Omit<C, "self"> & {
 
 export function filter<K, V, C extends Context>(
   self: IncrementalMap<K, V>,
-  callback: FilteredIncrementalMapCallback<V, C>,
+  callback: FilteredIncrementalMapCallback<K, V, C>,
   context?: C
 ): FilteredIncrementalMap<K, V, C> {
   const result = new FilteredIncrementalMap(self, callback, context);
@@ -38,7 +36,7 @@ export class FilteredIncrementalMap<
 > extends IncrementalMapBase<K, V, Dependencies<K, V, C>> {
   constructor(
     self: IncrementalMap<K, V>,
-    callback: FilteredIncrementalMapCallback<V, C>,
+    callback: FilteredIncrementalMapCallback<K, V, C>,
     context?: C
   ) {
     super({ ...context, self } as any);
@@ -48,7 +46,7 @@ export class FilteredIncrementalMap<
     this.#callback = callback;
   }
 
-  #callback: FilteredIncrementalMapCallback<V, C>;
+  #callback: FilteredIncrementalMapCallback<K, V, C>;
 
   _initialize(
     patches: Map<string, unknown>,
@@ -62,7 +60,7 @@ export class FilteredIncrementalMap<
       | undefined;
 
     for (const [k, v] of getDirtyEntries(self, selfPatch, self.keys())) {
-      const result = hookRenderer(k, () => this.#callback(v, ctx));
+      const result = hookRenderer(k, () => this.#callback(k, v, ctx));
       if (result) patch.updated.set(k, v);
     }
 
@@ -87,7 +85,7 @@ export class FilteredIncrementalMap<
       selfPatch,
       contextChanged ? self.keys() : dirtyKeys
     )) {
-      const result = hookRenderer(k, () => this.#callback(v, ctx));
+      const result = hookRenderer(k, () => this.#callback(k, v, ctx));
       if (result !== this.has(k)) {
         result ? patch.updated.set(k, v) : patch.deleted.add(k);
       }

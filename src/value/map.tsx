@@ -1,7 +1,6 @@
-import type { PatchObject } from "../core";
 import { HookRenderer } from "../core";
 import type { IncrementalValuePatch } from "./base";
-import { IncrementalValue, IncrementalValueTransformBase } from "./base";
+import { IncrementalValue, IncrementalValueBase } from "./base";
 
 export type MappedIncrementalValueCallback<I, O> = (self: I) => O;
 
@@ -18,7 +17,7 @@ export function map<I, O>(
   return node;
 }
 
-export class MappedIncrementalValue<I, O> extends IncrementalValueTransformBase<
+export class MappedIncrementalValue<I, O> extends IncrementalValueBase<
   O,
   MappedIncrementalValueDependencies<I>
 > {

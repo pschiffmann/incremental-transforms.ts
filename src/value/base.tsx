@@ -9,7 +9,7 @@ export interface IncrementalValuePatch<T> {
   readonly value: T;
 }
 
-export abstract class IncrementalValueTransformBase<T, D extends {} = {}>
+export abstract class IncrementalValueBase<T, D extends {} = {}>
   extends TransformNode<D, IncrementalValuePatch<T>>
   implements IncrementalValue<T> {
   constructor(dependencies: D) {

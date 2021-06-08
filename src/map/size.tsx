@@ -1,5 +1,5 @@
 import type { IncrementalValuePatch } from "../value";
-import { IncrementalValueTransformBase } from "../value";
+import { IncrementalValueBase } from "../value";
 import type { IncrementalMap, IncrementalMapPatch } from "./base";
 
 interface Dependencies {
@@ -14,7 +14,7 @@ export function size(
   return result;
 }
 
-export class IncrementalMapSize extends IncrementalValueTransformBase<
+export class IncrementalMapSize extends IncrementalValueBase<
   number,
   Dependencies
 > {
