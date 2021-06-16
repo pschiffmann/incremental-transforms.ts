@@ -22,7 +22,7 @@ export function expand<IK, IV, OK, OV, C extends Context>(
   self: IncrementalMap<IK, IV>,
   callback: ExpandedIncrementalMapCallback<IK, IV, OK, OV, C>,
   context?: C
-): ExpandedIncrementalMap<IK, IV, OK, OV, C> {
+): IncrementalMap<OK, OV> {
   const result = new ExpandedIncrementalMap(self, callback, context);
   result.connect();
   return result;

@@ -43,7 +43,7 @@ export function simplifyPatch<K, V>(
  * Notice: This function doesn't yield `patch.deleted` keys. `_render()`
  * implementations must read deleted keys from the patch directly.
  */
-export function* getDirtyEntries<K, V, HK>(
+export function* getDirtyEntries<K, V>(
   input: IncrementalMap<K, V>,
   patch: IncrementalMapPatch<K, V> | undefined,
   dirtyKeys: Iterable<K>

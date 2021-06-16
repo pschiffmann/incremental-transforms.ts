@@ -23,7 +23,7 @@ export function map<K, IV, OV, C extends Context>(
   self: IncrementalMap<K, IV>,
   callback: MappedIncrementalMapCallback<K, IV, OV, C>,
   context?: C
-): MappedIncrementalMap<K, IV, OV, C> {
+): IncrementalMap<K, OV> {
   const result = new MappedIncrementalMap(self, callback, context);
   result.connect();
   return result;

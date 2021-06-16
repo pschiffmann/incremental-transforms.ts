@@ -23,7 +23,7 @@ export function filter<K, V, C extends Context>(
   self: IncrementalMap<K, V>,
   callback: FilteredIncrementalMapCallback<K, V, C>,
   context?: C
-): FilteredIncrementalMap<K, V, C> {
+): IncrementalMap<K, V> {
   const result = new FilteredIncrementalMap(self, callback, context);
   result.connect();
   return result;
