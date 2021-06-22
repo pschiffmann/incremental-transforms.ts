@@ -1,11 +1,12 @@
 import { HookRenderer } from "../core";
 import * as $Set from "../util/set";
-import { Context, UnpackContext } from "../value";
+import { buildContext, Context, UnpackContext } from "../value";
 import {
   createPatch,
   IncrementalMap,
   IncrementalMapBase,
   IncrementalMapPatch,
+  simplifyPatch,
 } from "./base";
 
 interface Inputs<K> {
@@ -73,93 +74,46 @@ export class MergedIncrementalMap<
     patches: Map<string, unknown>,
     hookRenderer: HookRenderer<K>
   ): IncrementalMapPatch<K, OV> | null {
-    const [inputs, context] = splitDependencies(
+    const patch = createPatch<K, OV>();
+    const [inputs, context] = splitDependencies<K, I, C>(
       this.dependencies,
       this.#contextKeys
     );
-    const allOutKeys = new Set<OK>();
-    // Contains an entry for each key in `#mapKey`. The nested map contains
-    // (out key, in key) tuples.
-    const reverseMappedKeys = new Map<string, Map<any, any>>();
-    for (const [name, map] of Object.entries(inputs)) {
-      const allInKeys = new Set(map.keys());
-      const patch = patches.get(name) as
-        | IncrementalMapPatch<unknown, unknown>
-        | undefined;
-      if (patch) {
-        $Set.addAll(allInKeys, patch.updated.keys());
-        for (const k of patch.deleted) allInKeys.delete(k);
-      }
-      const mapKey = this.#mapKey?.[name];
-      if (mapKey) {
-        const reverseMap = new Map<any, any>();
-        reverseMappedKeys.set(name, reverseMap);
-        for (const ik of allInKeys) {
-          const ok = mapKey(ik);
-          if (reverseMap.has(ok)) {
-            throw new Error("`mapKey` is not injective.");
-          }
-          reverseMap.set(ok, ik);
-          allOutKeys.add(ok);
-        }
-      } else {
-        $Set.addAll(allOutKeys, allInKeys);
-      }
+    const ctx = buildContext(context, patches);
+
+    for (const [k, values] of getDirtyEntries<K, I>(inputs, patches as any)) {
+      const result = hookRenderer(k, () => this.#mergeValues(k, values, ctx));
+      patch.updated.set(k, result);
     }
 
-    const patch = createPatch();
-    for (const ok of allOutKeys) {
-      const originalKeys: any /*UnpackKeys<I>*/ = {};
-      const values: any /*UnpackValues<I>*/ = {};
-      for (const [name, map] of Object.entries(inputs)) {
-        const patch = patches.get(name);
-      }
-      const result = hookRenderer(ok, () =>
-        this.#mergeValues(ok, originalKeys, values, context)
-      );
-    }
+    return simplifyPatch(patch);
   }
 
   _render(
     patches: Map<string, unknown>,
     dirtyKeys: Set<K>,
     hookRenderer: HookRenderer<K>
-  ): IncrementalMapPatch<K, OV> | null {}
+  ): IncrementalMapPatch<K, OV> | null {
+    const patch = createPatch<K, OV>();
+    const [inputs, context] = splitDependencies<K, I, C>(
+      this.dependencies,
+      this.#contextKeys
+    );
+    const ctx = buildContext(context, patches);
+
+    for (const [k, values] of getDirtyEntries<K, I>(
+      inputs,
+      patches as any,
+      dirtyKeys
+    )) {
+      const result = hookRenderer(k, () => this.#mergeValues(k, values, ctx));
+      patch.updated.set(k, result);
+    }
+    $Set.addAll(patch.deleted, getDeletedKeys(inputs, patches as any));
+
+    return simplifyPatch(patch);
+  }
 }
-
-// class PatchedMapView<K, V> {
-//   constructor(
-//     private map: IncrementalMap<K, V>,
-//     private patch: IncrementalMapPatch<K, V> | undefined
-//   ) {}
-
-//   *keys() {
-//     if (this.patch) {
-//       yield* this.patch.updated.keys();
-//       for (const k of this.map.keys()) {
-//         if (!this.patch.deleted.has(k)) yield k;
-//       }
-//     } else {
-//       yield* this.map.keys();
-//     }
-//   }
-
-//   has(key: K): boolean {
-//     if (this.patch) {
-//       if (this.patch.updated.has(key)) return true;
-//       if (this.patch.deleted.has(key)) return false;
-//     }
-//     return this.map.has(key);
-//   }
-
-//   get(key: K): V | undefined {
-//     if (this.patch) {
-//       if (this.patch.updated.has(key)) return this.patch.updated.get(key);
-//       if (this.patch.deleted.has(key)) return undefined;
-//     }
-//     return this.map.get(key);
-//   }
-// }
 
 function splitDependencies<K, I extends Inputs<K>, C extends Context>(
   dependencies: I & C,
@@ -212,6 +166,27 @@ function* getDirtyEntries<K, I extends Inputs<K>>(
       yield [k, values];
     }
   }
+}
+
+function getDeletedKeys<K, I extends Inputs<K>>(
+  inputs: I,
+  patches: Map<string, IncrementalMapPatch<K, unknown>>
+): Set<K> {
+  const discoveredKeys = new Set<K>();
+  for (const inputName of Object.keys(inputs)) {
+    const patch = patches.get(inputName);
+    if (patch) $Set.addAll(discoveredKeys, patch.deleted);
+  }
+  checkKey: for (const k of discoveredKeys) {
+    for (const [inputName, map] of Object.entries(inputs)) {
+      const patch = patches.get(inputName);
+      if (patch?.updated.has(k) || (map.has(k) && !patch?.deleted.has(k))) {
+        discoveredKeys.delete(k);
+        continue checkKey;
+      }
+    }
+  }
+  return discoveredKeys;
 }
 
 // The current types can't resolve `OK` and `OV`. As a workaround, specify the
