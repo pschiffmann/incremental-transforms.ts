@@ -14,7 +14,7 @@ interface Inputs<K> {
 }
 
 type UnpackValues<K, I extends Inputs<K>> = {
-  readonly [K in keyof I]?: I[K] extends IncrementalMap<K, infer IV>
+  readonly [E in keyof I]?: I[E] extends IncrementalMap<K, infer IV>
     ? IV
     : never;
 };

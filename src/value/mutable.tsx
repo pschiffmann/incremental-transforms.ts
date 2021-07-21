@@ -1,7 +1,7 @@
 import { SourceNode } from "../core";
 import { IncrementalValue, IncrementalValuePatch } from "./base";
 
-export function mutable<T>(initialValue: T): IncrementalValue<T> {
+export function mutable<T>(initialValue: T): MutableIncrementalValue<T> {
   return new MutableIncrementalValue(initialValue);
 }
 

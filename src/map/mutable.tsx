@@ -1,4 +1,5 @@
 import { SourceNode } from "../core";
+import * as $Set from "../util/set";
 import type { IncrementalMap, IncrementalMapPatch } from "./base";
 import { createPatch, simplifyPatch } from "./base";
 
@@ -66,6 +67,14 @@ export class MutableIncrementalMap<K, V>
       patch ??= createPatch();
       patch.updated.delete(key);
       if (this.has(key)) patch.deleted.add(key);
+      return simplifyPatch(patch);
+    });
+  }
+
+  clear(): void {
+    this._setState(() => {
+      const patch = createPatch<K, V>();
+      $Set.addAll(patch.deleted, this.keys());
       return simplifyPatch(patch);
     });
   }
