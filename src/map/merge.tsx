@@ -64,24 +64,25 @@ export class MergedIncrementalMap<
       throw new Error("`inputs` and `context` must not share keys.");
     }
     this.#mergeValues = mergeValues;
-    this.#contextKeys = new Set(context && Object.keys(context));
+    this.#inputs = inputs;
+    this.#context = context ?? ({} as any);
   }
 
   #mergeValues: MergedIncrementalMapCallback<K, I, OV, C>;
-  #contextKeys: Set<string>;
+  #inputs: I;
+  #context: C;
 
   _initialize(
     patches: Map<string, unknown>,
     hookRenderer: HookRenderer<K>
   ): IncrementalMapPatch<K, OV> | null {
     const patch = createPatch<K, OV>();
-    const [inputs, context] = splitDependencies<K, I, C>(
-      this.dependencies,
-      this.#contextKeys
-    );
-    const ctx = buildContext(context, patches);
+    const ctx = buildContext(this.#context, patches);
 
-    for (const [k, values] of getDirtyEntries<K, I>(inputs, patches as any)) {
+    for (const [k, values] of getDirtyEntries<K, I>(
+      this.#inputs,
+      patches as any
+    )) {
       const result = hookRenderer(k, () => this.#mergeValues(k, values, ctx));
       patch.updated.set(k, result);
     }
@@ -95,36 +96,20 @@ export class MergedIncrementalMap<
     hookRenderer: HookRenderer<K>
   ): IncrementalMapPatch<K, OV> | null {
     const patch = createPatch<K, OV>();
-    const [inputs, context] = splitDependencies<K, I, C>(
-      this.dependencies,
-      this.#contextKeys
-    );
-    const ctx = buildContext(context, patches);
+    const ctx = buildContext(this.#context, patches);
 
     for (const [k, values] of getDirtyEntries<K, I>(
-      inputs,
+      this.#inputs,
       patches as any,
       dirtyKeys
     )) {
       const result = hookRenderer(k, () => this.#mergeValues(k, values, ctx));
       patch.updated.set(k, result);
     }
-    $Set.addAll(patch.deleted, getDeletedKeys(inputs, patches as any));
+    $Set.addAll(patch.deleted, getDeletedKeys(this.#inputs, patches as any));
 
     return simplifyPatch(patch);
   }
-}
-
-function splitDependencies<K, I extends Inputs<K>, C extends Context>(
-  dependencies: I & C,
-  contextKeys: Set<string>
-): [I, C] {
-  const inputs: any = {};
-  const context: any = {};
-  for (const [k, v] of Object.entries(dependencies)) {
-    (contextKeys.has(k) ? inputs : context)[k] = v;
-  }
-  return [inputs, context];
 }
 
 /**
