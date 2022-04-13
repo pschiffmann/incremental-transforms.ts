@@ -15,6 +15,7 @@
     "format": "prettier --write ."
   },
   "dependencies": {
+    "@pschiffmann/std": "^0.2.0",
     "flatqueue": "^2.0.3"
   },
   "optionalDependencies": {

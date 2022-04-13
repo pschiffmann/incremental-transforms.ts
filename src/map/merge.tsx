@@ -1,5 +1,5 @@
+import * as $Set from "@pschiffmann/std/set";
 import { HookRenderer } from "../core/index.js";
-import * as $Set from "../util/set.js";
 import { buildContext, Context, UnpackContext } from "../value/index.js";
 import {
   createPatch,

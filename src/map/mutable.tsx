@@ -1,5 +1,5 @@
+import * as $Set from "@pschiffmann/std/set";
 import { SourceNode } from "../core/index.js";
-import * as $Set from "../util/set.js";
 import {
   createPatch,
   IncrementalMap,

@@ -1,5 +1,5 @@
+import * as $Set from "@pschiffmann/std/set";
 import { HookRenderer } from "../core/index.js";
-import * as $Set from "../util/set.js";
 import { buildContext, Context, UnpackContext } from "../value/index.js";
 import {
   getDirtyEntries,
@@ -127,7 +127,7 @@ export class ExpandedIncrementalMap<
       if (oldExpandedKeys) {
         $Set.addAll(releasedKeys, $Set.diff(oldExpandedKeys, newExpandedKeys));
       }
-      if (!$Set.equals(oldExpandedKeys, newExpandedKeys)) {
+      if (!oldExpandedKeys || !$Set.equals(oldExpandedKeys, newExpandedKeys)) {
         patch.expandedKeys.set(ik, newExpandedKeys);
       }
     }

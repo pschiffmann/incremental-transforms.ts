@@ -1,26 +1,4 @@
-/**
- * Returns `self.get(key)` if it exists, else adds the result of `ifAbsent` to
- * `self` and returns it.
- */
-export function putIfAbsent<K, V>(
-  self: Map<K, V>,
-  key: K,
-  ifAbsent: () => V
-): V {
-  if (self.has(key)) return self.get(key)!;
-  const result = ifAbsent();
-  self.set(key, result);
-  return result;
-}
-
-/**
- * Copies all entries from `other` to `self`.
- */
-export function assign<K, V>(self: Map<K, V>, other: Map<K, V>): void {
-  for (const [k, v] of other) {
-    self.set(k, v);
-  }
-}
+export * from "@pschiffmann/std/map";
 
 /**
  * Returns `self.get(key1).get(key2).get(key3)`, or `fallback` if any key

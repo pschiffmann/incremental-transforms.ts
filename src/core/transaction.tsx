@@ -435,7 +435,7 @@ function commit() {
     const { hookState } = getNodeExpando(node);
     for (const [key, patch] of statePatch) {
       const keyState = hookState.get(key);
-      keyState ? $Map.assign(keyState, patch) : hookState.set(key, patch);
+      keyState ? $Map.setAll(keyState, patch) : hookState.set(key, patch);
     }
   }
   for (const node of process!.connected) {
