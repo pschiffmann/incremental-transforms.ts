@@ -1,5 +1,5 @@
-import type { HookRenderer } from "../core";
-import { buildContext, Context, UnpackContext } from "../value";
+import type { HookRenderer } from "../core/index.js";
+import { buildContext, Context, UnpackContext } from "../value/index.js";
 import {
   createPatch,
   getDirtyEntries,
@@ -7,7 +7,7 @@ import {
   IncrementalMapBase,
   IncrementalMapPatch,
   simplifyPatch,
-} from "./base";
+} from "./base.js";
 
 type IncrementalMapTypePredicate<K, IV, OV extends IV, C extends Context> = (
   key: K,
@@ -82,7 +82,7 @@ export class FilteredIncrementalMap<
   ): IncrementalMapPatch<K, OV> | null {
     const patch = createPatch<K, OV>();
     const { self, ...context } = this.dependencies;
-    const ctx = buildContext((context as unknown) as C, patches);
+    const ctx = buildContext(context as unknown as C, patches);
     const selfPatch = patches.get("self") as
       | IncrementalMapPatch<K, IV>
       | undefined;
@@ -102,7 +102,7 @@ export class FilteredIncrementalMap<
   ): IncrementalMapPatch<K, OV> | null {
     const patch = createPatch<K, OV>();
     const { self, ...context } = this.dependencies;
-    const ctx = buildContext((context as unknown) as C, patches);
+    const ctx = buildContext(context as unknown as C, patches);
     const selfPatch = patches.get("self") as
       | IncrementalMapPatch<K, IV>
       | undefined;

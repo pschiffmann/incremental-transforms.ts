@@ -1,4 +1,4 @@
-import type { IncrementalValue, IncrementalValuePatch } from "./base";
+import type { IncrementalValue, IncrementalValuePatch } from "./base.js";
 
 export interface Context {
   readonly [K: string]: IncrementalValue<any>;

@@ -1,5 +1,5 @@
-import { SourceNode } from "../core";
-import { IncrementalValue, IncrementalValuePatch } from "./base";
+import { SourceNode } from "../core/index.js";
+import { IncrementalValue, IncrementalValuePatch } from "./base.js";
 
 export function mutable<T>(initialValue: T): MutableIncrementalValue<T> {
   return new MutableIncrementalValue(initialValue);
@@ -7,7 +7,8 @@ export function mutable<T>(initialValue: T): MutableIncrementalValue<T> {
 
 export class MutableIncrementalValue<T>
   extends SourceNode<IncrementalValuePatch<T>>
-  implements IncrementalValue<T> {
+  implements IncrementalValue<T>
+{
   constructor(initialValue: T) {
     super();
     this.#value = initialValue;
@@ -23,6 +24,14 @@ export class MutableIncrementalValue<T>
     this._setState((patch) =>
       Object.is(this.#value, value) ? null : { value }
     );
+  }
+
+  update(f: (previous: T) => T): void {
+    this._setState((patch) => {
+      const previous = patch ? patch.value : this.#value;
+      const value = f(previous);
+      return Object.is(this.#value, value) ? null : { value };
+    });
   }
 
   _commit(patch: IncrementalValuePatch<T>): void {

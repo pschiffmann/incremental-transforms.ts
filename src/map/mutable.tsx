@@ -1,7 +1,11 @@
-import { SourceNode } from "../core";
-import * as $Set from "../util/set";
-import type { IncrementalMap, IncrementalMapPatch } from "./base";
-import { createPatch, simplifyPatch } from "./base";
+import { SourceNode } from "../core/index.js";
+import * as $Set from "../util/set.js";
+import {
+  createPatch,
+  IncrementalMap,
+  IncrementalMapPatch,
+  simplifyPatch,
+} from "./base.js";
 
 export function mutable<K, V>(
   entries?: Iterable<[K, V]>
@@ -11,7 +15,8 @@ export function mutable<K, V>(
 
 export class MutableIncrementalMap<K, V>
   extends SourceNode<IncrementalMapPatch<K, V>>
-  implements IncrementalMap<K, V> {
+  implements IncrementalMap<K, V>
+{
   constructor(entries?: Iterable<[K, V]>) {
     super();
     if (entries) {

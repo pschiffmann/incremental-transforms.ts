@@ -1,5 +1,4 @@
-import type { Node } from "../core";
-import { TransformNode } from "../core";
+import { Node, TransformNode } from "../core/index.js";
 
 export interface IncrementalValue<T> extends Node {
   readonly current: T;
@@ -11,7 +10,8 @@ export interface IncrementalValuePatch<T> {
 
 export abstract class IncrementalValueBase<T, D extends {} = {}>
   extends TransformNode<D, IncrementalValuePatch<T>>
-  implements IncrementalValue<T> {
+  implements IncrementalValue<T>
+{
   constructor(dependencies: D) {
     super(dependencies);
   }

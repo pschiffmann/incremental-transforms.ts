@@ -1,6 +1,6 @@
-import { HookRenderer } from "../core";
-import type { IncrementalValuePatch } from "./base";
-import { IncrementalValue, IncrementalValueBase } from "./base";
+import { HookRenderer } from "../core/index.js";
+import type { IncrementalValuePatch } from "./base.js";
+import { IncrementalValue, IncrementalValueBase } from "./base.js";
 
 export type MappedIncrementalValueCallback<I, O> = (self: I) => O;
 

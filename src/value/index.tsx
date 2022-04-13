@@ -1,6 +1,8 @@
-export { IncrementalValueBase } from "./base";
-export type { IncrementalValue, IncrementalValuePatch } from "./base";
-export { buildContext } from "./context";
-export type { Context, UnpackContext } from "./context";
-export { map, MappedIncrementalValue } from "./map";
-export { mutable, MutableIncrementalValue } from "./mutable";
+export {
+  IncrementalValueBase,
+  type IncrementalValue,
+  type IncrementalValuePatch,
+} from "./base.js";
+export { buildContext, type Context, type UnpackContext } from "./context.js";
+export { map, MappedIncrementalValue } from "./map.js";
+export { mutable, MutableIncrementalValue } from "./mutable.js";

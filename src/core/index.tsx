@@ -1,8 +1,8 @@
-export { useEffect, useMemo, useRef, useState } from "./hooks";
-export { SourceNode, TransformNode } from "./nodes";
-export type { HookRenderer, Node, PatchObject } from "./nodes";
-export { transaction } from "./transaction";
-export type { OnCommitCallback } from "./transaction";
+export { useEffect, useMemo, useRef, useState } from "./hooks.js";
+export { SourceNode, TransformNode } from "./nodes.js";
+export type { HookRenderer, Node, PatchObject } from "./nodes.js";
+export { transaction } from "./transaction.js";
+export type { OnCommitCallback } from "./transaction.js";
 
 /**
  * Connects `node` and returns a disconnect callback.

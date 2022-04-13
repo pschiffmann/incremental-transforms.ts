@@ -1,7 +1,7 @@
 import FlatQueue from "flatqueue";
-import { createHookRenderer, HookProps, SetStateCallback } from "./hooks";
-import { getNodeExpando, Node, SourceNode, TransformNode } from "./nodes";
-import * as $Map from "../util/map";
+import * as $Map from "../util/map.js";
+import { createHookRenderer, HookProps, SetStateCallback } from "./hooks.js";
+import { getNodeExpando, Node, SourceNode, TransformNode } from "./nodes.js";
 
 export type ErrorHandler = (error: any) => void;
 
@@ -320,12 +320,11 @@ function resolveConnectedDisconnected() {
   // in the same transaction.
   const queue = new FlatQueue<TransformNode>();
   for (const node of connected) {
-    queue.push(getNodeExpando(node).id, node);
+    queue.push(node, getNodeExpando(node).id);
   }
   for (;;) {
-    const node = queue.peekValue();
+    const node = queue.pop();
     if (!node) break;
-    queue.pop();
     const dependencies = Object.values<Node>(node.dependencies);
     const dependenciesConnected = dependencies.every(
       (dep) =>
@@ -356,7 +355,7 @@ function render() {
   const discovered = new Set<TransformNode>();
   function enqueue(node: TransformNode) {
     if (discovered.has(node)) return;
-    dirty.push(getNodeExpando(node).id, node);
+    dirty.push(node, getNodeExpando(node).id);
     discovered.add(node);
   }
 
@@ -377,9 +376,8 @@ function render() {
   // Process one element of `dirty` per iteration, render that node and enqueue
   // all its consumers.
   for (;;) {
-    const node = dirty.peekValue();
+    const node = dirty.pop();
     if (!node) break;
-    dirty.pop();
     const expando = getNodeExpando(node);
 
     // Build patch object from dirty dependencies.
@@ -391,17 +389,13 @@ function render() {
 
     const hookStatePatch = $Map.putIfAbsent(hookState, node, () => new Map());
     // Render `node`.
-    const {
-      hookRenderer,
-      newHookProps,
-      effectCleanups,
-      effects,
-    } = createHookRenderer(
-      node,
-      expando.hookProps,
-      expando.hookState,
-      hookStatePatch
-    );
+    const { hookRenderer, newHookProps, effectCleanups, effects } =
+      createHookRenderer(
+        node,
+        expando.hookProps,
+        expando.hookState,
+        hookStatePatch
+      );
     const patch = connected.has(node)
       ? node._initialize(deps, hookRenderer)
       : node._render(deps, new Set(hookStatePatch.keys()), hookRenderer);

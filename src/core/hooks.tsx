@@ -1,6 +1,6 @@
-import * as $Map from "../util/map";
-import { HookRenderer, TransformNode } from "./nodes";
-import { mutateTransformNode } from "./transaction";
+import * as $Map from "../util/map.js";
+import { HookRenderer, TransformNode } from "./nodes.js";
+import { mutateTransformNode } from "./transaction.js";
 
 export type HookProps =
   | EffectHookProps
@@ -290,7 +290,8 @@ export function useEffect(
 }
 
 /**
- *
+ * TODO: Rename to `useCache()` to emphasize semantic difference to React
+ * `useMemo()`.
  */
 export function useMemo<R>(callback: () => R, deps: any[]): R {
   return HookContext.current.useMemo(callback, deps);

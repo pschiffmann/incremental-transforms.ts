@@ -1,6 +1,5 @@
-import type { IncrementalValuePatch } from "../value";
-import { IncrementalValueBase } from "../value";
-import type { IncrementalMap, IncrementalMapPatch } from "./base";
+import { IncrementalValueBase, IncrementalValuePatch } from "../value/index.js";
+import { IncrementalMap, IncrementalMapPatch } from "./base.js";
 
 interface Dependencies {
   readonly self: IncrementalMap<unknown, unknown>;

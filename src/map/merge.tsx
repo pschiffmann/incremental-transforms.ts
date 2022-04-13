@@ -1,13 +1,13 @@
-import { HookRenderer } from "../core";
-import * as $Set from "../util/set";
-import { buildContext, Context, UnpackContext } from "../value";
+import { HookRenderer } from "../core/index.js";
+import * as $Set from "../util/set.js";
+import { buildContext, Context, UnpackContext } from "../value/index.js";
 import {
   createPatch,
   IncrementalMap,
   IncrementalMapBase,
   IncrementalMapPatch,
   simplifyPatch,
-} from "./base";
+} from "./base.js";
 
 interface Inputs<K> {
   readonly [T: string]: IncrementalMap<K, unknown>;

@@ -1,5 +1,5 @@
-import { HookPropsMap, HookStateMap } from "./hooks";
-import { connect, disconnect, mutateSourceNode } from "./transaction";
+import { HookPropsMap, HookStateMap } from "./hooks.js";
+import { connect, disconnect, mutateSourceNode } from "./transaction.js";
 
 export type HookRenderer<K = unknown> = <R>(key: K, callback?: () => R) => R;
 
@@ -46,7 +46,7 @@ export abstract class Node<P = unknown> {
         hookState: new Map(),
       });
     } else {
-      nodeExpandos.set((this as unknown) as SourceNode, {
+      nodeExpandos.set(this as unknown as SourceNode, {
         id,
         consumers: new Set(),
       });
@@ -57,7 +57,7 @@ export abstract class Node<P = unknown> {
    * Returns all nodes that have this node as an input and are not suspended.
    */
   get consumers(): TransformNode[] {
-    const consumers = nodeExpandos.get((this as unknown) as Node)!.consumers;
+    const consumers = nodeExpandos.get(this as unknown as Node)!.consumers;
     return consumers ? [...consumers] : [];
   }
 

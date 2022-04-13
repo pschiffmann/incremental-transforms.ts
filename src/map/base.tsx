@@ -1,5 +1,4 @@
-import type { Node } from "../core";
-import { TransformNode } from "../core";
+import { Node, TransformNode } from "../core/index.js";
 
 export interface IncrementalMap<K, V> extends Node {
   has(key: K): boolean;
@@ -60,9 +59,10 @@ export function* getDirtyEntries<K, V>(
   }
 }
 
-export abstract class IncrementalMapBase<K, V, D, HK = K>
+export abstract class IncrementalMapBase<K, V, D extends {} = {}, HK = K>
   extends TransformNode<D, IncrementalMapPatch<K, V>, HK>
-  implements IncrementalMap<K, V> {
+  implements IncrementalMap<K, V>
+{
   #entries = new Map<K, V>();
 
   get size() {

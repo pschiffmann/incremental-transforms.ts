@@ -1,12 +1,12 @@
-import type { HookRenderer } from "../core";
-import { buildContext, Context, UnpackContext } from "../value";
+import { HookRenderer } from "../core/index.js";
+import { buildContext, Context, UnpackContext } from "../value/index.js";
 import {
   getDirtyEntries,
   IncrementalMap,
   IncrementalMapBase,
   IncrementalMapPatch,
   simplifyPatch,
-} from "./base";
+} from "./base.js";
 
 type MappedEntriesIncrementalMapCallback<IK, IV, OK, OV, C extends Context> = (
   key: IK,
@@ -61,7 +61,7 @@ export class MappedEntriesIncrementalMap<
   ): IncrementalMapPatch<OK, OV> | null {
     const patch = createPatch<IK, OK, OV>();
     const { self, ...context } = this.dependencies;
-    const ctx = buildContext((context as unknown) as C, patches);
+    const ctx = buildContext(context as unknown as C, patches);
     const selfPatch = patches.get("self") as
       | IncrementalMapPatch<IK, IV>
       | undefined;
@@ -86,7 +86,7 @@ export class MappedEntriesIncrementalMap<
   ): IncrementalMapPatch<OK, OV> | null {
     const patch = createPatch<IK, OK, OV>();
     const { self, ...context } = this.dependencies;
-    const ctx = buildContext((context as unknown) as C, patches);
+    const ctx = buildContext(context as unknown as C, patches);
     const selfPatch = patches.get("self") as
       | IncrementalMapPatch<IK, IV>
       | undefined;
