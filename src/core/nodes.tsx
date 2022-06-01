@@ -1,6 +1,17 @@
 import { HookPropsMap, HookStateMap } from "./hooks.js";
 import { connect, disconnect, mutateSourceNode } from "./transaction.js";
 
+// TODO: Support composite keys. Composite keys are compared element-wise
+// (with $Array.equals()). This is required to support multiple callbacks in a
+// single transform, e.g. the `expand` and `merge` callbacks of
+// `$IncrementalMap.expand()`.
+// export interface HookRenderer {
+//   renderAtomicKey<R>(key: unknown, callback: () => R) : R;
+//   renderCompositeKey<R>(key: unknown[], callback: () => R) : R;
+//   releaseAtomicKey(key: unknown): void;
+//   releaseCompositeKey(key: unknown[]): void;
+// }
+
 export type HookRenderer<K = unknown> = <R>(key: K, callback?: () => R) => R;
 
 export interface SourceNodeExpando {
