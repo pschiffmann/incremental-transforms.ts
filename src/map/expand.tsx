@@ -10,15 +10,15 @@ import {
   IncrementalMapPatch,
 } from "./base.js";
 
-type ExpandCallback<IK, IV, OK, OV, C extends Context> = (
+type ExpandCallback<IK, IV, OK, EV, C extends Context> = (
   key: IK,
   value: IV,
   context: UnpackContext<C>
-) => Iterable<[OK, OV]>;
+) => Iterable<[OK, EV]>;
 
-type MergeCallback<IK, OK, OV, C extends Context> = (
+type MergeCallback<IK, OK, EV, OV, C extends Context> = (
   key: OK,
-  values: Map<IK, OV>,
+  values: Map<IK, EV>,
   context: UnpackContext<C>
 ) => OV;
 
@@ -26,21 +26,31 @@ type Dependencies<K, V, C extends Context> = Omit<C, "self"> & {
   readonly self: IncrementalMap<K, V>;
 };
 
-interface Options<IK, OK, OV, C extends Context> {
-  readonly context?: C;
-  readonly merge?: MergeCallback<IK, OK, OV, C>;
-}
-
 export function expand<IK, IV, OK, OV, C extends Context>(
   self: IncrementalMap<IK, IV>,
-  callback: ExpandCallback<IK, IV, OK, OV, C>,
-  options?: Options<IK, OK, OV, C>
-): IncrementalMap<OK, OV> {
+  expand: ExpandCallback<IK, IV, OK, OV, C>,
+  context?: C
+): IncrementalMapBase<OK, OV>;
+export function expand<IK, IV, OK, EV, OV, C extends Context>(
+  self: IncrementalMap<IK, IV>,
+  expand: ExpandCallback<IK, IV, OK, EV, C>,
+  merge: MergeCallback<IK, OK, EV, OV, C>,
+  context?: C
+): IncrementalMapBase<OK, OV>;
+export function expand(
+  self: IncrementalMap<unknown, unknown>,
+  expand: ExpandCallback<unknown, unknown, unknown, unknown, {}>,
+  arg3:
+    | MergeCallback<unknown, unknown, unknown, unknown, {}>
+    | Context
+    | undefined,
+  arg4?: Context
+): IncrementalMapBase<unknown, unknown> {
   const result = new ExpandedIncrementalMap(
     self,
-    callback,
-    options?.merge,
-    options?.context
+    expand,
+    typeof arg3 === "function" ? arg3 : assertSingleValue,
+    typeof arg3 === "function" ? arg4 : arg3
   );
   result.connect();
   return result;
@@ -50,13 +60,14 @@ export class ExpandedIncrementalMap<
   IK,
   IV,
   OK,
+  EV,
   OV,
   C extends Context
 > extends IncrementalMapBase<OK, OV, Dependencies<IK, IV, C>, IK> {
   constructor(
     self: IncrementalMap<IK, IV>,
-    expand: ExpandCallback<IK, IV, OK, OV, C>,
-    merge: MergeCallback<IK, OK, OV, C> = throwOnKeyCollision,
+    expand: ExpandCallback<IK, IV, OK, EV, C>,
+    merge: MergeCallback<IK, OK, EV, OV, C>,
     context?: C
   ) {
     if (context?.hasOwnProperty("self")) {
@@ -67,8 +78,8 @@ export class ExpandedIncrementalMap<
     this.#merge = merge;
   }
 
-  #expand: ExpandCallback<IK, IV, OK, OV, C>;
-  #merge: MergeCallback<IK, OK, OV, C>;
+  #expand: ExpandCallback<IK, IV, OK, EV, C>;
+  #merge: MergeCallback<IK, OK, EV, OV, C>;
 
   /**
    * For each input key in `dependencies.self`, stores the output keys that were
@@ -81,15 +92,15 @@ export class ExpandedIncrementalMap<
    * For each output keys, stores all input keys that were `#expand()`ed into
    * this key, and their respective values.
    */
-  #expandedValues = new Map<OK, Map<IK, OV>>();
+  #expandedValues = new Map<OK, Map<IK, EV>>();
 
   _initialize(
     patches: Map<string, unknown>,
     hookRenderer: HookRenderer<IK>
-  ): ExpandedIncrementalMapPatch<IK, OK, OV> | null {
-    const patch = createPatch<IK, OK, OV>();
+  ): ExpandedIncrementalMapPatch<IK, OK, EV, OV> | null {
+    const patch = createPatch<IK, OK, EV, OV>();
     const getExpandedValues = (ok: OK) =>
-      $Map.putIfAbsent(patch.expandedValues, ok, () => new Map());
+      $Map.putIfAbsent(patch.expandedValues, ok, () => new Map<IK, EV>());
 
     const { self, ...context } = this.dependencies;
     const ctx = buildContext(context as unknown as C, patches);
@@ -100,18 +111,15 @@ export class ExpandedIncrementalMap<
     for (const [ik, iv] of getDirtyEntries(self, selfPatch, self.keys())) {
       const expandedKeys = new Set<OK>();
       const entries = hookRenderer(ik, () => this.#expand(ik, iv, ctx));
-      for (const [ok, ov] of entries) {
+      for (const [ok, ev] of entries) {
         if (expandedKeys.has(ok)) throwOnDuplicateKey();
         expandedKeys.add(ok);
-        getExpandedValues(ok).set(ik, ov);
+        getExpandedValues(ok).set(ik, ev);
       }
       if (expandedKeys.size !== 0) patch.expandedKeys.set(ik, expandedKeys);
     }
-    for (const [ok, expandedValues] of patch.expandedValues) {
-      const value =
-        expandedValues.size === 1
-          ? $Iterable.first(expandedValues.values())!
-          : this.#merge(ok, new Map(expandedValues), ctx);
+    for (const [ok, ev] of patch.expandedValues) {
+      const value = this.#merge(ok, new Map(ev), ctx);
       patch.updated.set(ok, value);
     }
 
@@ -122,8 +130,8 @@ export class ExpandedIncrementalMap<
     patches: Map<string, unknown>,
     dirtyKeys: Set<IK>,
     hookRenderer: HookRenderer<IK>
-  ): ExpandedIncrementalMapPatch<IK, OK, OV> | null {
-    const patch = createPatch<IK, OK, OV>();
+  ): ExpandedIncrementalMapPatch<IK, OK, EV, OV> | null {
+    const patch = createPatch<IK, OK, EV, OV>();
     const getExpandedValues = (ok: OK) =>
       $Map.putIfAbsent(
         patch.expandedValues,
@@ -145,10 +153,10 @@ export class ExpandedIncrementalMap<
     )) {
       const expandedKeys = new Set<OK>();
       const entries = hookRenderer(ik, () => this.#expand(ik, iv, ctx));
-      for (const [ok, ov] of entries) {
+      for (const [ok, ev] of entries) {
         if (expandedKeys.has(ok)) throwOnDuplicateKey();
         expandedKeys.add(ok);
-        getExpandedValues(ok).set(ik, ov);
+        getExpandedValues(ok).set(ik, ev);
       }
 
       const prevExpandedKeys = this.#expandedKeys.get(ik);
@@ -176,16 +184,12 @@ export class ExpandedIncrementalMap<
       }
     }
 
-    for (const [ok, expandedValues] of patch.expandedValues) {
+    for (const [ok, ev] of patch.expandedValues) {
       const prevExpandedValues = this.#expandedValues.get(ok);
-      const equal =
-        !!prevExpandedValues && $Map.equals(prevExpandedValues, expandedValues);
+      const equal = !!prevExpandedValues && $Map.equals(prevExpandedValues, ev);
       if (equal) patch.expandedValues.delete(ok);
       if (!equal || contextChanged) {
-        const value =
-          expandedValues.size === 1
-            ? $Iterable.first(expandedValues.values())!
-            : this.#merge(ok, new Map(expandedValues), ctx);
+        const value = this.#merge(ok, new Map(ev), ctx);
         if (!this.has(ok) || !Object.is(value, this.get(ok))) {
           patch.updated.set(ok, value);
         }
@@ -195,7 +199,7 @@ export class ExpandedIncrementalMap<
     return simplifyPatch(patch);
   }
 
-  _commit(patch: ExpandedIncrementalMapPatch<IK, OK, OV>) {
+  _commit(patch: ExpandedIncrementalMapPatch<IK, OK, EV, OV>) {
     super._commit(patch);
     for (const [ik, ok] of patch.expandedKeys) {
       if (ok.size !== 0) {
@@ -220,13 +224,18 @@ export class ExpandedIncrementalMap<
   }
 }
 
-interface ExpandedIncrementalMapPatch<IK, OK, V>
-  extends IncrementalMapPatch<OK, V> {
+interface ExpandedIncrementalMapPatch<IK, OK, EV, OV>
+  extends IncrementalMapPatch<OK, OV> {
   readonly expandedKeys: Map<IK, Set<OK>>;
-  readonly expandedValues: Map<OK, Map<IK, V>>;
+  readonly expandedValues: Map<OK, Map<IK, EV>>;
 }
 
-function createPatch<IK, OK, V>(): ExpandedIncrementalMapPatch<IK, OK, V> {
+function createPatch<IK, OK, EV, OV>(): ExpandedIncrementalMapPatch<
+  IK,
+  OK,
+  EV,
+  OV
+> {
   return {
     updated: new Map(),
     deleted: new Set(),
@@ -235,9 +244,9 @@ function createPatch<IK, OK, V>(): ExpandedIncrementalMapPatch<IK, OK, V> {
   };
 }
 
-export function simplifyPatch<IK, OK, V>(
-  patch: ExpandedIncrementalMapPatch<IK, OK, V>
-): ExpandedIncrementalMapPatch<IK, OK, V> | null {
+export function simplifyPatch<IK, OK, EV, OV>(
+  patch: ExpandedIncrementalMapPatch<IK, OK, EV, OV>
+): ExpandedIncrementalMapPatch<IK, OK, EV, OV> | null {
   return patch.updated.size !== 0 ||
     patch.deleted.size !== 0 ||
     patch.expandedKeys.size !== 0 ||
@@ -246,7 +255,8 @@ export function simplifyPatch<IK, OK, V>(
     : null;
 }
 
-function throwOnKeyCollision(): never {
+function assertSingleValue<IK, OK, OV>(key: OK, values: Map<IK, OV>): OV {
+  if (values.size === 1) return $Iterable.first(values.values())!;
   throw new Error(
     "Key collision encountered. " +
       "Multiple input keys were mapped to the same output key."
