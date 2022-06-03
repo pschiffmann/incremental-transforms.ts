@@ -38,7 +38,7 @@ export function merge<K, I extends Inputs<K>, OV, C extends Context>(
   inputs: I,
   mergeValues: MergedIncrementalMapCallback<K, I, OV, C>,
   context?: C
-): IncrementalMap<K, OV> {
+): IncrementalMapBase<K, OV> {
   const result = new MergedIncrementalMap(inputs, mergeValues, context);
   result.connect();
   return result;
