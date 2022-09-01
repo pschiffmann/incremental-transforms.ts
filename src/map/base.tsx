@@ -59,6 +59,27 @@ export function* getDirtyEntries<K, V>(
   }
 }
 
+export class PatchedMapView<K, V> {
+  constructor(
+    base: IncrementalMap<K, V>,
+    patch: IncrementalMapPatch<K, V> | undefined
+  ) {
+    this.#base = base;
+    this.#patch = patch;
+  }
+
+  #base: IncrementalMap<K, V>;
+  #patch: IncrementalMapPatch<K, V> | undefined;
+
+  get(key: K): V | undefined {
+    if (this.#patch) {
+      if (this.#patch.updated.has(key)) return this.#patch.updated.get(key);
+      if (this.#patch.deleted.has(key)) return undefined;
+    }
+    return this.#base.get(key);
+  }
+}
+
 export abstract class IncrementalMapBase<K, V, D extends {} = {}, HK = K>
   extends TransformNode<D, IncrementalMapPatch<K, V>, HK>
   implements IncrementalMap<K, V>

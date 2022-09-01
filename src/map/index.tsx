@@ -2,6 +2,7 @@ export {
   createPatch,
   getDirtyEntries,
   IncrementalMapBase,
+  PatchedMapView,
   simplifyPatch,
   type IncrementalMap,
   type IncrementalMapPatch,
